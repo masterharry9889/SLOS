@@ -1,0 +1,257 @@
+// Student Life OS - Prisma Schema
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users & Auth ────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String
+  avatarUrl     String?
+  googleId      String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  refreshTokens  RefreshToken[]
+  subjects       Subject[]
+  documents      Document[]
+  notes          Note[]
+  artifacts      Artifact[]
+  quizzes        Quiz[]
+  attempts       Attempt[]
+  progressEvents ProgressEvent[]
+  jobs           Job[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── Subjects & Documents ────────────────────────────────────────
+
+model Subject {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  examDate    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  documents Document[]
+  topics    Topic[]
+  artifacts Artifact[]
+  quizzes   Quiz[]
+
+  @@index([userId])
+  @@map("subjects")
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileKey    String   // S3 object key
+  fileSize   Int
+  mimeType   String
+  sourceType String   // syllabus | content
+  status     String   @default("uploaded") // uploaded | parsing | parsed | error
+  topicTree  Json?    // Parsed topic-tree JSON from agents-service
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([subjectId])
+  @@map("documents")
+}
+
+// ─── Topic Tree (self-referencing) ───────────────────────────────
+
+model Topic {
+  id          String   @id @default(cuid())
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Topic?   @relation("TopicTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Topic[]  @relation("TopicTree")
+  title       String
+  level       String   // unit | chapter | concept
+  order       Int      @default(0)
+  status      String   @default("not_started") // not_started | studied | revised | tested
+  sourceSpans Json?    // [{ page, start, end }]
+  confirmed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  notes          Note[]
+  artifacts      Artifact[]
+  progressEvents ProgressEvent[]
+  quizTopics     QuizTopic[]
+
+  @@index([subjectId])
+  @@index([parentId])
+  @@map("topics")
+}
+
+// ─── Notes (versioned, per chapter) ──────────────────────────────
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId   String
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  content   String   // markdown
+  version   Int      @default(1)
+  depth     String?  // brief | standard | detailed
+  mode      String?  // notes | summary
+  isLatest  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([topicId, isLatest])
+  @@index([userId])
+  @@map("notes")
+}
+
+// ─── Artifacts (cheatsheets, question papers) ────────────────────
+
+model Artifact {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topicId   String?
+  topic     Topic?   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  type      String   // cheatsheet | question_paper
+  title     String
+  content   String   // markdown
+  metadata  Json?    // answer key, marking scheme, blueprint
+  scope     String?  // chapter | unit | subject
+  pdfKey    String?  // S3 key for generated PDF
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([subjectId])
+  @@index([topicId])
+  @@map("artifacts")
+}
+
+// ─── Quizzes & Attempts ──────────────────────────────────────────
+
+model Quiz {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title     String
+  questions Json     // Array of question objects
+  createdAt DateTime @default(now())
+
+  attempts   Attempt[]
+  quizTopics QuizTopic[]
+
+  @@index([userId])
+  @@index([subjectId])
+  @@map("quizzes")
+}
+
+model QuizTopic {
+  quizId  String
+  quiz    Quiz  @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  topicId String
+  topic   Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([quizId, topicId])
+  @@map("quiz_topics")
+}
+
+model Attempt {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId      String
+  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers     Json?     // Student's answers keyed by questionId
+  score       Float?
+  maxScore    Float?
+  feedback    Json?     // Per-question feedback from AI grading
+  status      String    @default("in_progress") // in_progress | submitted | graded
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  gradedAt    DateTime?
+
+  @@index([userId])
+  @@index([quizId])
+  @@map("attempts")
+}
+
+// ─── Progress & Analytics ────────────────────────────────────────
+
+model ProgressEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId     String?
+  topic       Topic?   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  type        String   // studied | revised | quiz_taken | study_session
+  durationMin Int?
+  metadata    Json?    // e.g. { quizId, score, maxScore }
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([topicId, type])
+  @@index([userId, type])
+  @@map("progress_events")
+}
+
+// ─── Async Job Queue ─────────────────────────────────────────────
+
+model Job {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String    // parse | generate_notes | generate_cheatsheet | generate_paper | generate_quiz | evaluate
+  status       String    @default("queued") // queued | processing | completed | failed
+  payload      Json      // Input data for the agents-service
+  result       Json?     // Output data from agents-service
+  error        String?   // Error message on failure
+  resourceId   String?   // ID of the created/updated resource
+  resourceType String?   // document | note | artifact | quiz | attempt
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  completedAt  DateTime?
+
+  @@index([userId, status])
+  @@index([status])
+  @@map("jobs")
+}

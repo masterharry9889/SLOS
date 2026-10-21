@@ -1,0 +1,10 @@
+# requirements.txt
+fastapi
+pydantic
+httpx
+anthropic  # for LLM calls
+pgvector  # postgres vector extension
+psycopg2  # postgres connector
+pydantic-v2  # pydantic v2
+pyhmac  # for HMAC-SHA256 callbacks
+markdown  # markdown processing
