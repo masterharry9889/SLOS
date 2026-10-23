@@ -8,6 +8,7 @@ NotesAgent output only returns after verifier passes (max 2 repair rounds).
 
 import os
 import re
+import json
 
 from app.core import LLMWrapper
 

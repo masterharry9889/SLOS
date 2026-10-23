@@ -18,11 +18,11 @@ class TutorAgent:
         }.get(level, "")
 
         prompt = (
-            "Answer the student's question using the provided chapter context.\"
+            "Answer the student's question using the provided chapter context.\n"
             "Cite page numbers for any factual claim from the notes.\n"
-            level_clause + "\n\n"
-            "CHAPTER CONTEXT:\n" + chapter_context + "\n\n"
-            "STUDENT QUESTION: " + query + "\n\n"
+            f"{level_clause}\n\n"
+            f"CHAPTER CONTEXT:\n{chapter_context}\n\n"
+            f"STUDENT QUESTION: {query}\n\n"
             "Answer with: (1) direct answer, (2) supporting evidence with page citations, "
             "(3) if level=exam or advanced, include a short derivation/example.\n"
             "Return ONLY the answer, no surrounding analysis or quotes."

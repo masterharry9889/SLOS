@@ -1,0 +1,148 @@
+# ==============================================================================
+# Student Life OS (SLOS) - Root .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Operating System Files
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+# ------------------------------------------------------------------------------
+# IDEs & Developer Tooling
+# ------------------------------------------------------------------------------
+.idea/
+*.iml
+*.iws
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+*.bak
+
+# ------------------------------------------------------------------------------
+# Environment Variables & Secrets
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+*.pem
+*.key
+*.cert
+*.crt
+# Keep example env templates tracked
+!.env.example
+!*/.env.example
+
+# ------------------------------------------------------------------------------
+# Python & Virtual Environments (agents-service)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.ipynb_checkpoints/
+celerybeat-schedule
+celerybeat.pid
+
+# ------------------------------------------------------------------------------
+# Node.js & JavaScript/TypeScript (backend & frontend)
+# ------------------------------------------------------------------------------
+node_modules/
+jspm_packages/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Compilation & Build outputs
+dist/
+out/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------------------------------------------
+# Testing & E2E
+# ------------------------------------------------------------------------------
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+
+# ------------------------------------------------------------------------------
+# Database, Local Storage & Docker
+# ------------------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+dump.rdb
+postgres_data/
+redis_data/
+minio_data/
+uploads/
+tmp/
+temp/
+
+# ------------------------------------------------------------------------------
+# Framework & Monorepo Caches
+# ------------------------------------------------------------------------------
+.turbo/
+.cache/
+.vercel

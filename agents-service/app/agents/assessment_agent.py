@@ -2,6 +2,7 @@
 """AssessmentAgent: grade MCQ deterministically; grade written answers against a rubric with score, feedback, and missing_points; return topic-level weakness stats."""
 
 import os
+import json
 from app.core import LLMWrapper
 
 
@@ -24,9 +25,9 @@ class AssessmentAgent:
         prompt = (
             "Grade the following student answer against the provided rubric.\n"
             "Return JSON with: score (int), feedback (str), missing_points (list of str).\n\n"
-            "RUBIC: " + str(rubic) + "\n\n"
+            "RUBRIC: " + str(rubric) + "\n\n"
             "STUDENT ANSWER: " + student_answer + "\n\n"
-            "JSON schema: {{\\n"
+            "JSON schema: {{\n"
             '    "score": int,\n'
             '    "feedback": str,\n'
             '    "missing_points": [str]\n'
@@ -62,8 +63,10 @@ class AssessmentAgent:
         for r in results:
             topic = r.get("topic_id", "unknown")
             if topic not in topic_stats:
-                topic_stats[topic] = {"errors": 0, "topics_attempted": 0}
-            topic_stats[topic]["errors"] += r.get("missing_points", []) if isinstance(r.get("missing_points"), list) else []
+                topic_stats[topic] = {"errors": [], "topics_attempted": 0}
+            mp = r.get("missing_points", [])
+            if isinstance(mp, list):
+                topic_stats[topic]["errors"].extend(mp)
             topic_stats[topic]["topics_attempted"] += 1
 
         # Calculate weakness percentages

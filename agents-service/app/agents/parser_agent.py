@@ -41,7 +41,7 @@ Rescribe exactly "syllabus" or "content" — no reasoning, no quotes."""
         else:
             return self._extract_content_tree(raw_text)
 
-    def _extract_syllabus_tree(self, text: str) -> dict:
+    def _extract_syllabus_tree(self, text: str, retries: int = 1) -> dict:
         """Extract topic tree from a syllabus/document structure."""
         prompt = """Extract the topic tree structure from this syllabus.
 
@@ -75,9 +75,11 @@ Extract from the text below, preserving page numbers and section boundaries. Ret
             return schema.model_dump()
         except (json.JSONDecodeError, ValidationError) as e:
             # Auto-repair: retry once with adjusted prompt
-            return self._extract_syllabus_tree(text)
+            if retries > 0:
+                return self._extract_syllabus_tree(text, retries=retries - 1)
+            raise
 
-    def _extract_content_tree(self, text: str) -> dict:
+    def _extract_content_tree(self, text: str, retries: int = 1) -> dict:
         """Extract topic tree from research paper/content by chunking by headings."""
         prompt = """Chunk this content by headings and produce a topic tree.
 
@@ -113,4 +115,6 @@ Return ONLY the JSON, no surrounding text."""
             schema = SchemaTopicTree(**tree)
             return schema.model_dump()
         except (json.JSONDecodeError, ValidationError) as e:
-            return self._extract_content_tree(text)
+            if retries > 0:
+                return self._extract_content_tree(text, retries=retries - 1)
+            raise

@@ -40,3 +40,6 @@ Return ONLY the markdown cheat sheet, no surrounding analysis or quotes.
         )
 
         return response.strip()
+
+
+CheatsheetAgent = CheatSheetAgent

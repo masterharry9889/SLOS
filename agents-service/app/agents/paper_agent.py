@@ -61,8 +61,11 @@ class PaperAgent:
         except (json.JSONDecodeError,) as e:
             return self._regenerate(prompt, str(e))
 
-    def _regenerate(self, prompt: str, error: str) -> dict:
+    def _regenerate(self, prompt: str, error: str, retries: int = 1) -> dict:
         """Regenerate paper with error correction info."""
+        if retries <= 0:
+            return {"questions": [], "error": f"Failed after retries: {error}"}
+
         err_prompt = prompt + (
             "\n\nERROR FROM PREVIOUS ATTEMPT: " + error +
             "\n\nEnsure marks sum exactly to total_marks and all chapters are covered. Return ONLY valid JSON."
@@ -73,10 +76,10 @@ class PaperAgent:
             result = json.loads(response.strip())
             total = sum(q.get("marks", 0) for q in result.get("questions", []))
             if total != self._extract_total_marks(prompt):
-                return self._regenerate(err_prompt, "Still marks sum " + str(total) + " != required")
+                return self._regenerate(err_prompt, "Still marks sum " + str(total) + " != required", retries=retries - 1)
             return result
         except Exception as e:
-            return self._regenerate(err_prompt, "Failed to parse: " + str(e))
+            return self._regenerate(err_prompt, "Failed to parse: " + str(e), retries=retries - 1)
 
     def _extract_total_marks(self, prompt: str) -> int:
         """Extract total_marks from the original prompt."""

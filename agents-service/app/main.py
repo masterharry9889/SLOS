@@ -1,23 +1,28 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import httpx
 import hmac
 import hashlib
 import os
+import json
 
-app = FastAPI()
+app = FastAPI(title="Student Life OS - Agents Service")
 
 X_SERVICE_KEY = os.getenv("X_SERVICE_KEY")
 
-# Auth: reject without valid X-Service-Key
+# Auth: reject without valid X-Service-Key (exempt /health and docs)
 @app.middleware("http")
-async def auth_middleware(request, call_next):
-    key = request.headers.get("X-Service-Key")
-    if not key or key != X_SERVICE_KEY:
-        return JSONResponse(
-            status_code=401,
-            content={"error": {"code": "unauthorized", "message": "Missing or invalid X-Service-Key"}}
-        )
+async def auth_middleware(request: Request, call_next):
+    if request.url.path in ["/health", "/docs", "/openapi.json"]:
+        return await call_next(request)
+    if X_SERVICE_KEY:
+        key = request.headers.get("X-Service-Key")
+        if not key or key != X_SERVICE_KEY:
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"code": "unauthorized", "message": "Missing or invalid X-Service-Key"}}
+            )
     return await call_next(request)
 
 # Health endpoint
@@ -27,7 +32,8 @@ async def health():
 
 # ---- Async job helper ----
 def sign_callback(body: bytes) -> str:
-    return hmac.new(X_SERVICE_KEY.encode(), body, hashlib.sha256).hexdigest()
+    secret = (X_SERVICE_KEY or "dev-secret").encode()
+    return hmac.new(secret, body, hashlib.sha256).hexdigest()
 
 async def run_background_job(job_id: str, coro):
     """Run a coroutine in background and POST result to callback."""
