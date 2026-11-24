@@ -30,32 +30,11 @@ interface ChatSessionsState {
   getActiveSession: () => ChatSession | null;
 }
 
-const DEFAULT_FIRST_SESSION: ChatSession = {
-  id: 'session-default-tutor',
-  title: 'Calculus Limits & Conceptual Proofs',
-  agentId: 'tutor',
-  provider: 'gemini',
-  model: 'gemini-2.5-flash',
-  subjectId: 'sub-1',
-  level: 'simple',
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  messages: [
-    {
-      id: 'welcome-tutor-1',
-      role: 'assistant',
-      content: `Hello! I am your **Academic Tutor Agent**. 🎓\n\nI can help you understand tough conceptual topics, walk through mathematical derivations, and break down complex ideas step-by-step.\n\nWhat would you like to explore or solve together today?`,
-      level: 'simple',
-      created_at: new Date().toISOString(),
-    },
-  ],
-};
-
 export const useChatSessionsStore = create<ChatSessionsState>()(
   persist(
     (set, get) => ({
-      sessions: [DEFAULT_FIRST_SESSION],
-      activeSessionId: DEFAULT_FIRST_SESSION.id,
+      sessions: [],
+      activeSessionId: null,
 
       createSession: (options = {}) => {
         const id = `session-${Date.now()}`;
@@ -217,6 +196,18 @@ export const useChatSessionsStore = create<ChatSessionsState>()(
     }),
     {
       name: 'slos_chat_sessions_v1',
+      version: 2,
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<ChatSessionsState>;
+        const sessions = (state.sessions ?? []).filter((session) => session.id !== 'session-default-tutor');
+        return {
+          ...state,
+          sessions,
+          activeSessionId: sessions.some((session) => session.id === state.activeSessionId)
+            ? state.activeSessionId
+            : sessions[0]?.id ?? null,
+        };
+      },
       storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : {
         getItem: () => null,
         setItem: () => {},

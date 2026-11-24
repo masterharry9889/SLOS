@@ -22,6 +22,7 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
+  settings      Json      @default("{}")
 
   refreshTokens  RefreshToken[]
   subjects       Subject[]
@@ -32,6 +33,7 @@ model User {
   attempts       Attempt[]
   progressEvents ProgressEvent[]
   jobs           Job[]
+  chatMessages   ChatMessage[]
 
   @@map("users")
 }
@@ -64,6 +66,7 @@ model Subject {
   topics    Topic[]
   artifacts Artifact[]
   quizzes   Quiz[]
+  chatMessages ChatMessage[]
 
   @@index([userId])
   @@map("subjects")
@@ -112,6 +115,7 @@ model Topic {
   artifacts      Artifact[]
   progressEvents ProgressEvent[]
   quizTopics     QuizTopic[]
+  chatMessages   ChatMessage[]
 
   @@index([subjectId])
   @@index([parentId])
@@ -254,4 +258,21 @@ model Job {
   @@index([userId, status])
   @@index([status])
   @@map("jobs")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topicId   String?
+  topic     Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  role      String
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, subjectId, createdAt])
+  @@map("chat_messages")
 }

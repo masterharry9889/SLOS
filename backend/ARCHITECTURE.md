@@ -1,7 +1,7 @@
 # Student Life OS — Backend Architecture Reference
 
 ## Tech Stack
-Node.js 20 · TypeScript strict · Fastify 4 · Zod · Prisma (PostgreSQL) · BullMQ (Redis/IORedis) · AWS SDK v3 (S3/MinIO) · bcryptjs · jsonwebtoken · Puppeteer · marked · pino
+Node.js 20 · TypeScript strict · Fastify 5 · Zod · Prisma (PostgreSQL) · BullMQ (Redis/IORedis) · AWS SDK v3 (S3/MinIO) · bcryptjs · jsonwebtoken · Puppeteer · marked · pino
 
 ## Project Layout
 ```
@@ -152,7 +152,8 @@ Mapping to Topic rows:
 | DELETE | /auth/account | — | Auth required. Deletes user + all S3 files |
 
 ### Subjects (auth required)
-CRUD: `POST /`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id`
+CRUD: `POST /subjects`, `GET /subjects`, `GET /subjects/:id`, `PATCH /subjects/:id`, `DELETE /subjects/:id`
+Document listing: `GET /subjects/:id/documents`
 
 ### Documents (auth required)
 | POST | /documents/upload-url | `{ fileName, fileSize, mimeType, subjectId }` | Returns `{ uploadUrl, fileKey }` |
@@ -225,10 +226,10 @@ Dashboard shape:
 5. Publishes status event to Redis pub/sub → SSE subscribers get notified
 
 ## Config (src/config.ts)
-Validate with Zod at startup: PORT, HOST, NODE_ENV, LOG_LEVEL, DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_FORCE_PATH_STYLE, AGENTS_SERVICE_URL, AGENTS_SERVICE_KEY, HMAC_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL, CORS_ORIGIN, CALLBACK_BASE_URL.
+Validate with Zod at startup: PORT, HOST, NODE_ENV, LOG_LEVEL, DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_FORCE_PATH_STYLE, PRESIGNED_URL_TTL_SECONDS, AGENTS_SERVICE_URL, AGENTS_SERVICE_KEY, HMAC_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL, CORS_ORIGIN, FRONTEND_URL, CALLBACK_BASE_URL.
 
 ## Refresh Token
-Hash refresh tokens with bcrypt before storing. Cookie: `httpOnly`, `secure` (prod), `sameSite: lax`, `path: /api/v1/auth`, maxAge 7 days.
+Generate refresh tokens from cryptographically secure random bytes and persist only their SHA-256 digests. Rotate on refresh and revoke on logout. Cookie: `httpOnly`, `secure` (prod), `sameSite: lax`, `path: /api/v1/auth`, maxAge 7 days.
 
 ## Rate Limiting
 Default: 100 req/min keyed by user ID (or IP if unauthenticated).  

@@ -14,7 +14,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { cn, formatBytes } from '@/lib/utils';
-import { getPresignedUrl, confirmUpload } from '@/lib/api/endpoints';
+import { getPresignedUrl, registerDocument } from '@/lib/api/endpoints';
 import type { Document } from '@/types';
 
 export interface UploadZoneProps {
@@ -46,16 +46,13 @@ export interface UploadQueueItem {
   xhr?: XMLHttpRequest;
 }
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 const ALLOWED_MIME_TYPES: Record<string, 'pdf' | 'docx' | 'image'> = {
   'application/pdf': 'pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/msword': 'docx',
   'image/png': 'image',
   'image/jpeg': 'image',
-  'image/jpg': 'image',
-  'image/webp': 'image',
 };
 
 function resolveFileType(file: File): 'pdf' | 'docx' | 'image' | null {
@@ -64,8 +61,8 @@ function resolveFileType(file: File): 'pdf' | 'docx' | 'image' | null {
   }
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (ext === 'pdf') return 'pdf';
-  if (ext === 'docx' || ext === 'doc') return 'docx';
-  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp') return 'image';
+  if (ext === 'docx') return 'docx';
+  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') return 'image';
   return null;
 }
 
@@ -120,10 +117,7 @@ export function UploadZone({
           presigned.upload_url ||
           (presigned as unknown as { uploadUrl?: string }).uploadUrl;
 
-        docId =
-          presigned.document_id ||
-          (presigned as unknown as { documentId?: string }).documentId ||
-          `doc-${Date.now()}`;
+        docId = presigned.file_key;
 
         if (!uploadUrl) {
           throw new Error('Failed to obtain a valid storage upload URL');
@@ -185,7 +179,13 @@ export function UploadZone({
         // Step 3: Confirm upload with backend
         updateFileItem(id, { status: 'confirming', progress: 99 });
 
-        const confirmedDocument = await confirmUpload(docId, true);
+        const confirmedDocument = await registerDocument({
+          subjectId,
+          fileKey: presigned.file_key,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+        });
 
         const finalDocument: Document = confirmedDocument || {
           id: docId,
@@ -211,7 +211,6 @@ export function UploadZone({
           err instanceof Error ? err.message : 'Upload failed unexpectedly';
 
         if (docId) {
-          confirmUpload(docId, false).catch(() => {});
         }
 
         updateFileItem(id, {

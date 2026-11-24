@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,11 +19,10 @@ import {
   Loader2,
   RotateCcw,
   Check,
-  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateQuestionPaperSchema, type GenerateQuestionPaperInput } from '@/lib/schemas';
-import { generateQuestionPaper } from '@/lib/api/endpoints';
+import { formatArtifactSection, formatPaperContent, generateQuestionPaper } from '@/lib/api/endpoints';
 import { useToast } from '@/components/ui/toaster';
 import { JobStepper } from '@/components/features/job-stepper';
 import { UploadZone } from '@/components/features/upload-zone';
@@ -46,6 +45,7 @@ const QUESTION_TYPE_LABELS = {
   numerical: 'Numerical / Calculation',
   true_false: 'True / False',
 };
+const EMPTY_QUESTION_TYPES: GenerateQuestionPaperInput['question_types'] = [];
 
 export function QuestionPaperGenerator({
   subjectId,
@@ -82,9 +82,8 @@ export function QuestionPaperGenerator({
     register,
     control,
     handleSubmit,
-    watch,
     setValue,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<GenerateQuestionPaperInput>({
     resolver: zodResolver(generateQuestionPaperSchema),
     defaultValues: {
@@ -113,11 +112,12 @@ export function QuestionPaperGenerator({
   });
 
   // Watch form values for dynamic computations
-  const watchedChapters = watch('chapter_ids') || [];
-  const watchedTotalMarks = watch('total_marks') || 0;
-  const watchedQuestionTypes = watch('question_types') || [];
-  const watchedDifficulty = watch('difficulty_mix') || { easy: 30, medium: 50, hard: 20 };
-  const watchedPastPaperDocId = watch('past_paper_document_id');
+  const watchedChapters = useWatch({ control, name: 'chapter_ids' }) || [];
+  const watchedTotalMarks = useWatch({ control, name: 'total_marks' }) || 0;
+  const watchedQuestionTypes = useWatch({ control, name: 'question_types' }) ?? EMPTY_QUESTION_TYPES;
+  const watchedDifficulty = useWatch({ control, name: 'difficulty_mix' }) || { easy: 30, medium: 50, hard: 20 };
+  const watchedPastPaperDocId = useWatch({ control, name: 'past_paper_document_id' });
+  const watchedDuration = useWatch({ control, name: 'duration_minutes' });
 
   // Calculate live question types total marks
   const calculatedTotalMarks = useMemo(() => {
@@ -196,8 +196,8 @@ export function QuestionPaperGenerator({
         addToast('Question paper generation job queued.', 'info');
       }
     },
-    onError: (err: any) => {
-      addToast(err?.message || 'Failed to submit question paper generation', 'error');
+    onError: (err: unknown) => {
+      addToast(err instanceof Error ? err.message : 'Failed to submit question paper generation', 'error');
     },
   });
 
@@ -210,26 +210,33 @@ export function QuestionPaperGenerator({
   };
 
   // Handle job completion
-  const handleJobComplete = (result: any) => {
+  const handleJobComplete = (result: unknown) => {
+    const output = asRecord(result);
+    if (!output || typeof output.content !== 'string' || !output.content.trim()) {
+      handleJobError('The generation job completed without returning a question paper.');
+      return;
+    }
+
+    const metadata = asRecord(output.metadata) ?? {};
+    const questions = formatPaperContent(output.content);
+    if (!questions.trim()) {
+      handleJobError('The generation job returned an empty question paper.');
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ['question-papers', subjectId] });
     addToast('Question paper created successfully!', 'success');
 
     const paper: QuestionPaper = {
-      id: result?.id || `paper-${Date.now()}`,
+      id: typeof output.artifact_id === 'string' ? output.artifact_id : activeJobId ?? '',
       subject_id: subjectId,
-      title: result?.title || `${subjectTitle} Practice Exam`,
-      questions:
-        result?.questions ||
-        result?.content ||
-        generateSamplePaperMarkdown(watchedQuestionTypes, watchedTotalMarks),
-      answer_key:
-        result?.answer_key ||
-        generateSampleAnswerKeyMarkdown(watchedQuestionTypes),
-      marking_scheme:
-        result?.marking_scheme ||
-        generateSampleMarkingSchemeMarkdown(watchedQuestionTypes),
-      total_marks: watchedTotalMarks,
-      duration_minutes: watch('duration_minutes') || 90,
+      title: typeof output.title === 'string' ? output.title : `${subjectTitle} Question Paper`,
+      questions,
+      answer_key: formatArtifactSection(output.answer_key ?? metadata.answer_key),
+      marking_scheme: formatArtifactSection(output.marking_scheme ?? metadata.marking_scheme),
+      total_marks: typeof metadata.total_marks === 'number' ? metadata.total_marks : watchedTotalMarks,
+      duration_minutes: typeof metadata.duration_minutes === 'number'
+        ? metadata.duration_minutes
+        : watchedDuration,
       created_at: new Date().toISOString(),
     };
 
@@ -702,81 +709,10 @@ export function QuestionPaperGenerator({
   );
 }
 
-// Markdown generators for preview fallback
-function generateSamplePaperMarkdown(types: any[], totalMarks: number): string {
-  return `
-### Section A: Multiple Choice Questions (1 Mark Each)
-
-**Q1.** Which data structure operates on a First-In-First-Out (FIFO) principle? **[1 Mark]**
-- (A) Stack
-- (B) Queue
-- (C) Priority Queue
-- (D) Binary Search Tree
-
-**Q2.** What is the worst-case lookup time complexity in an unbalanced Binary Search Tree? **[1 Mark]**
-- (A) $O(1)$
-- (B) $O(\\log n)$
-- (C) $O(n)$
-- (D) $O(n \\log n)$
-
-**Q3.** An AVL tree maintains balance by ensuring the height difference between left and right subtrees is at most: **[1 Mark]**
-- (A) 0
-- (B) 1
-- (C) 2
-- (D) $\\log n$
-
----
-
-### Section B: Short Answer Questions (4 Marks Each)
-
-**Q4.** Explain the step-by-step procedure of an in-order traversal of a binary search tree. Why does this traversal output keys in strictly ascending order? **[4 Marks]**
-
-**Q5.** Differentiate between a B-Tree and a B+ Tree with respect to data pointer storage and range query performance. **[4 Marks]**
-
----
-
-### Section C: Long Answer / Analytical Questions (10 Marks Each)
-
-**Q6.** Given the following sequence of integers inserted into an initially empty AVL Tree:
-$$[14, 21, 35, 12, 10, 8, 28]$$
-1. Draw the resulting AVL tree at each step where an imbalance occurs.
-2. Clearly identify whether a Single Right, Single Left, Left-Right, or Right-Left rotation is required.
-3. Compute the final height of the tree. **[10 Marks]**
-`;
-}
-
-function generateSampleAnswerKeyMarkdown(types: any[]): string {
-  return `
-### Section A Answers
-- **Q1**: **(B) Queue** - Follows FIFO ordering where elements enter from the rear and leave from the front.
-- **Q2**: **(C) $O(n)$** - In degenerate (skewed) BSTs, the structure reduces to a singly-linked list.
-- **Q3**: **(B) 1** - The AVL balance invariant requires balance factor $\\in \\{-1, 0, 1\\}$.
-
-### Section B Model Answers
-- **Q4**:
-  - Step 1: Traverse the left subtree recursively.
-  - Step 2: Visit and process root node.
-  - Step 3: Traverse the right subtree recursively.
-  - *Reasoning*: Because for every node $X$, all left subtree keys $< X.key$ and all right subtree keys $> X.key$, processing left, root, then right guarantees strictly ascending order.
-
-### Section C Model Solution
-- **Q5 / Q6**:
-  - After inserting 14, 21, 35: Imbalance at node 14 (Balance Factor = -2, Right-Right condition). Requires **Single Left (RR) Rotation**.
-  - Final root becomes 21 with left child 14 and right child 35.
-`;
-}
-
-function generateSampleMarkingSchemeMarkdown(types: any[]): string {
-  return `
-- **Q1 - Q3**: 1 mark for correct option selection. No negative marking.
-- **Q4**:
-  - Correct recursive sequence stated: **2 Marks**
-  - Mathematical BST property explanation: **2 Marks**
-- **Q6**:
-  - Intermediate tree representations: **4 Marks**
-  - Correct identification of rotation types: **3 Marks**
-  - Final balanced AVL tree and height computation: **3 Marks**
-`;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 export default QuestionPaperGenerator;

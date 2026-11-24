@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { LLMProviderId, LLMProviderConfig, AgentId, AgentDefinition, ChatLevel } from '@/types';
+import type { LLMProviderId, LLMProviderConfig, AgentId, AgentDefinition } from '@/types';
 
 export const ACADEMIC_AGENTS: Record<AgentId, AgentDefinition> = {
   tutor: {
@@ -299,6 +299,12 @@ export const useLLMStore = create<LLMStoreState>()(
     }),
     {
       name: 'slos_llm_settings_v1',
+      version: 2,
+      migrate: () => ({
+        providers: DEFAULT_PROVIDERS,
+        activeProviderId: 'anthropic' as LLMProviderId,
+        activeModel: DEFAULT_PROVIDERS.anthropic.defaultModel,
+      }),
       storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : {
         getItem: () => null,
         setItem: () => {},
@@ -307,134 +313,3 @@ export const useLLMStore = create<LLMStoreState>()(
     }
   )
 );
-
-/**
- * Validates a provider API key by making a minimal test call.
- */
-export async function testProviderApiKey(
-  providerId: LLMProviderId,
-  apiKey: string,
-  model?: string,
-  customBaseUrl?: string
-): Promise<{ success: boolean; message: string }> {
-  if (!apiKey && providerId !== 'custom') {
-    return { success: false, message: 'API key cannot be empty' };
-  }
-
-  try {
-    if (providerId === 'gemini') {
-      const selectedModel = model || 'gemini-2.5-flash';
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Hello' }] }],
-          generationConfig: { maxOutputTokens: 5 },
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const msg = errorData?.error?.message || `HTTP ${res.status}`;
-        return { success: false, message: `Gemini API Error: ${msg}` };
-      }
-      return { success: true, message: 'Google Gemini key is active and verified!' };
-    }
-
-    if (providerId === 'groq') {
-      const selectedModel = model || 'llama-3.3-70b-versatile';
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 5,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const msg = errorData?.error?.message || `HTTP ${res.status}`;
-        return { success: false, message: `Groq API Error: ${msg}` };
-      }
-      return { success: true, message: 'Groq Cloud key is active and verified!' };
-    }
-
-    if (providerId === 'openai') {
-      const selectedModel = model || 'gpt-4o-mini';
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 5,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const msg = errorData?.error?.message || `HTTP ${res.status}`;
-        return { success: false, message: `OpenAI API Error: ${msg}` };
-      }
-      return { success: true, message: 'OpenAI key is active and verified!' };
-    }
-
-    if (providerId === 'deepseek') {
-      const selectedModel = model || 'deepseek-chat';
-      const res = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 5,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const msg = errorData?.error?.message || `HTTP ${res.status}`;
-        return { success: false, message: `DeepSeek API Error: ${msg}` };
-      }
-      return { success: true, message: 'DeepSeek key is active and verified!' };
-    }
-
-    if (providerId === 'custom') {
-      const baseUrl = customBaseUrl || 'http://localhost:11434/v1';
-      const endpoint = `${baseUrl.replace(/\/+$/, '')}/models`;
-      const res = await fetch(endpoint, {
-        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-      });
-
-      if (!res.ok) {
-        return { success: false, message: `Custom endpoint returned status ${res.status}` };
-      }
-      return { success: true, message: 'Custom endpoint reachable and verified!' };
-    }
-
-    // Anthropic (CORS direct calls from browser may require proxy or extension)
-    if (providerId === 'anthropic') {
-      if (apiKey.startsWith('sk-ant-') && apiKey.length > 20) {
-        return { success: true, message: 'Anthropic key format looks valid!' };
-      }
-      return { success: false, message: 'Invalid Anthropic key format (expected sk-ant-...)' };
-    }
-
-    return { success: true, message: 'Key saved successfully.' };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, message: `Connection failed: ${errorMsg}` };
-  }
-}

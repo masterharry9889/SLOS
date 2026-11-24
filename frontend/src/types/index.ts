@@ -27,7 +27,6 @@ export interface RegisterRequest {
 export interface AuthResponse {
   user: User;
   access_token: string;
-  refresh_token: string;
 }
 
 export interface TokenRefreshResponse {
@@ -77,8 +76,8 @@ export interface Document {
 
 export interface PresignedUploadResponse {
   upload_url: string;
-  document_id: string;
-  fields: Record<string, string>;
+  file_key: string;
+  fields?: Record<string, string>;
 }
 
 export interface ConfirmUploadRequest {
@@ -267,6 +266,17 @@ export interface QuizResult {
   attempt: QuizAttempt;
   explanations: Record<string, string>; // question_id -> explanation markdown
   weak_topics: { topic_id: string; topic_title: string; score_percentage: number }[];
+  question_results?: {
+    question_id: string;
+    score: number;
+    max_score: number;
+    is_correct: boolean;
+    correct_answer?: string;
+    explanation: string;
+    missing_points: string[];
+    topic_id?: string;
+    topic_title?: string;
+  }[];
 }
 
 export interface SubmitQuizRequest {
@@ -377,6 +387,7 @@ export interface Citation {
 export interface SendChatRequest {
   subject_id: string;
   chapter_id?: string;
+  agent_id?: string;
   message: string;
   level: ChatLevel;
   history: { role: 'user' | 'assistant'; content: string }[];

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Award,
   RotateCcw,
-  BookOpen,
   CheckCircle2,
   XCircle,
   ChevronDown,
@@ -14,11 +13,7 @@ import {
   BarChart3,
   ListFilter,
   Check,
-  AlertTriangle,
-  ArrowRight,
-  TrendingUp,
   Brain,
-  Layers,
 } from 'lucide-react';
 import {
   BarChart,
@@ -34,7 +29,7 @@ import { cn } from '@/lib/utils';
 import { updateTopicStatus } from '@/lib/api/endpoints';
 import { useToast } from '@/components/ui/toaster';
 import { MarkdownRenderer } from '@/components/ui/markdown-renderer';
-import type { Quiz, QuizResult, QuizQuestion } from '@/types';
+import type { Quiz, QuizResult } from '@/types';
 
 export interface QuizResultsProps {
   quiz: Quiz;
@@ -316,8 +311,11 @@ export function QuizResults({
                 <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
                 <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip
-                  formatter={(val: any) => [`${val}%`, 'Accuracy']}
-                  labelFormatter={(_: any, payload: any) => payload?.[0]?.payload?.fullName || ''}
+                  formatter={(value) => [`${String(value ?? '')}%`, 'Accuracy']}
+                  labelFormatter={(_, payload) => {
+                    const data = payload?.[0]?.payload as { fullName?: unknown } | undefined;
+                    return typeof data?.fullName === 'string' ? data.fullName : '';
+                  }}
                   contentStyle={{
                     backgroundColor: 'hsl(var(--card))',
                     borderColor: 'hsl(var(--border))',
@@ -454,30 +452,14 @@ export function QuizResults({
         <div className="space-y-3">
           {(quiz.questions || []).map((q, idx) => {
             const studentAns = studentAnswerMap.get(q.id) || '';
-            const rawQ: any = q;
-
-            // Determine correctness
-            let isCorrect = false;
-            let correctAnswerText = '';
-
-            if (rawQ.correctAnswer !== undefined && q.options) {
-              correctAnswerText = q.options[rawQ.correctAnswer] || String(rawQ.correctAnswer);
-              isCorrect =
-                studentAns === correctAnswerText || studentAns === String(rawQ.correctAnswer);
-            } else if (rawQ.correct_answer !== undefined) {
-              correctAnswerText = String(rawQ.correct_answer);
-              isCorrect =
-                studentAns.trim().toLowerCase() === correctAnswerText.trim().toLowerCase();
-            } else {
-              // Sample fallback
-              isCorrect = studentAns.length > 0;
-              correctAnswerText = q.options ? q.options[0] : 'Standard Solution';
-            }
-
-            const explanation =
-              result.explanations?.[q.id] ||
-              rawQ.explanation ||
-              `The answer follows the fundamental principles of ${q.topic_title || 'this topic'}.`;
+            const grading = result.question_results?.find((item) => item.question_id === q.id);
+            const isCorrect = grading?.is_correct ?? false;
+            const correctnessKnown = grading !== undefined;
+            const correctAnswerText = grading?.correct_answer ?? '';
+            const explanation = grading?.explanation || result.explanations?.[q.id] || '';
+            const scoreLabel = grading
+              ? `${grading.score}/${grading.max_score} Marks`
+              : 'Grading unavailable';
 
             const isExpanded = !!expandedQuestions[q.id];
 
@@ -486,9 +468,11 @@ export function QuizResults({
                 key={q.id}
                 className={cn(
                   'rounded-xl border transition-all',
-                  isCorrect
-                    ? 'border-emerald-500/20 bg-card hover:border-emerald-500/40'
-                    : 'border-rose-500/20 bg-card hover:border-rose-500/40'
+                  !correctnessKnown
+                    ? 'border-border bg-card hover:border-border/80'
+                    : isCorrect
+                      ? 'border-emerald-500/20 bg-card hover:border-emerald-500/40'
+                      : 'border-rose-500/20 bg-card hover:border-rose-500/40'
                 )}
               >
                 {/* Header row */}
@@ -500,12 +484,16 @@ export function QuizResults({
                     <div
                       className={cn(
                         'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-bold',
-                        isCorrect
-                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                        !correctnessKnown
+                          ? 'border-border bg-muted text-muted-foreground'
+                          : isCorrect
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400'
                       )}
                     >
-                      {isCorrect ? (
+                      {!correctnessKnown ? (
+                        <span aria-label="Grading unavailable">—</span>
+                      ) : isCorrect ? (
                         <CheckCircle2 className="h-4 w-4" />
                       ) : (
                         <XCircle className="h-4 w-4" />
@@ -524,12 +512,14 @@ export function QuizResults({
                         <span
                           className={cn(
                             'text-[11px] font-bold',
-                            isCorrect
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-rose-600 dark:text-rose-400'
+                            !correctnessKnown
+                              ? 'text-muted-foreground'
+                              : isCorrect
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
                           )}
                         >
-                          {isCorrect ? `+${q.marks || 1} Marks` : '0 Marks'}
+                          {scoreLabel}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-foreground/80 line-clamp-1">
@@ -567,9 +557,11 @@ export function QuizResults({
                       <div
                         className={cn(
                           'rounded-lg border p-3',
-                          isCorrect
-                            ? 'border-emerald-500/30 bg-emerald-500/5'
-                            : 'border-rose-500/30 bg-rose-500/5'
+                          !correctnessKnown
+                            ? 'border-border bg-muted/30'
+                            : isCorrect
+                              ? 'border-emerald-500/30 bg-emerald-500/5'
+                              : 'border-rose-500/30 bg-rose-500/5'
                         )}
                       >
                         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
@@ -578,24 +570,28 @@ export function QuizResults({
                         <div
                           className={cn(
                             'font-semibold text-sm',
-                            isCorrect
-                              ? 'text-emerald-700 dark:text-emerald-300'
-                              : 'text-rose-700 dark:text-rose-300'
+                            !correctnessKnown
+                              ? 'text-muted-foreground'
+                              : isCorrect
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : 'text-rose-700 dark:text-rose-300'
                           )}
                         >
                           {studentAns ? studentAns : <em className="italic font-normal">Unanswered</em>}
                         </div>
                       </div>
 
-                      {/* Correct answer */}
-                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block mb-1">
-                          Correct Answer:
-                        </span>
-                        <div className="font-semibold text-sm text-emerald-800 dark:text-emerald-200">
-                          {correctAnswerText}
+                      {/* Reference answer */}
+                      {correctAnswerText && (
+                        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block mb-1">
+                            Reference Answer:
+                          </span>
+                          <div className="font-semibold text-sm text-emerald-800 dark:text-emerald-200">
+                            {correctAnswerText}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Explanation */}

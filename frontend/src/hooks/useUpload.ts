@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { getPresignedUrl, confirmUpload } from '@/lib/api/endpoints';
+import { getPresignedUrl, registerDocument } from '@/lib/api/endpoints';
 import type { Document } from '@/types';
 
 export type UploadStatus =
@@ -22,16 +22,13 @@ export interface UseUploadReturn {
   abort: () => void;
 }
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 const ALLOWED_MIME_TYPES: Record<string, 'pdf' | 'docx' | 'image'> = {
   'application/pdf': 'pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/msword': 'docx',
   'image/png': 'image',
   'image/jpeg': 'image',
-  'image/jpg': 'image',
-  'image/webp': 'image',
 };
 
 function getFileType(file: File): 'pdf' | 'docx' | 'image' | null {
@@ -40,8 +37,8 @@ function getFileType(file: File): 'pdf' | 'docx' | 'image' | null {
   }
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (ext === 'pdf') return 'pdf';
-  if (ext === 'docx' || ext === 'doc') return 'docx';
-  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp') return 'image';
+  if (ext === 'docx') return 'docx';
+  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') return 'image';
   return null;
 }
 
@@ -80,10 +77,7 @@ export function useUpload(subjectId: string): UseUploadReturn {
       activeXhrRef.current.abort();
       activeXhrRef.current = null;
     }
-    if (currentDocIdRef.current) {
-      confirmUpload(currentDocIdRef.current, false).catch(() => {});
-      currentDocIdRef.current = null;
-    }
+    currentDocIdRef.current = null;
     setStatus('error');
     setError('Upload was cancelled');
     setProgress(0);
@@ -132,10 +126,7 @@ export function useUpload(subjectId: string): UseUploadReturn {
         const uploadUrl =
           presignedResponse.upload_url ||
           (presignedResponse as unknown as { uploadUrl?: string }).uploadUrl;
-        docId =
-          presignedResponse.document_id ||
-          (presignedResponse as unknown as { documentId?: string; fileKey?: string }).documentId ||
-          `doc-${Date.now()}`;
+        docId = presignedResponse.file_key;
 
         currentDocIdRef.current = docId;
 
@@ -201,7 +192,13 @@ export function useUpload(subjectId: string): UseUploadReturn {
         setStatus('confirming');
         setProgress(99);
 
-        const confirmedDoc = await confirmUpload(docId, true);
+        const confirmedDoc = await registerDocument({
+          subjectId,
+          fileKey: presignedResponse.file_key,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+        });
         currentDocIdRef.current = null;
 
         const finalDoc: Document = confirmedDoc || {
@@ -225,10 +222,7 @@ export function useUpload(subjectId: string): UseUploadReturn {
             ? err.message
             : 'An unexpected error occurred during upload';
 
-        if (docId) {
-          confirmUpload(docId, false).catch(() => {});
-          currentDocIdRef.current = null;
-        }
+        currentDocIdRef.current = null;
 
         setError(errorMsg);
         setStatus('error');

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronRight,
@@ -13,11 +13,8 @@ import {
   Play,
   ArrowLeft,
   AlertTriangle,
-  HelpCircle,
   FileCheck2,
-  CheckCircle2,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { getSubject } from '@/lib/api/endpoints';
 import { useQuiz } from '@/hooks/useQuiz';
 import { QuizPlayer } from '@/components/features/quiz/quiz-player';
@@ -29,7 +26,6 @@ type QuizState = 'not_started' | 'in_progress' | 'completed';
 
 export default function QuizPlayerPage() {
   const params = useParams();
-  const router = useRouter();
 
   const subjectId = (params?.id as string) || '';
   const quizId = (params?.quizId as string) || '';
@@ -61,21 +57,17 @@ export default function QuizPlayerPage() {
     submit,
     isSubmitting,
     result,
+    error,
     startQuizSession,
     resetQuiz,
   } = useQuiz(quizId);
 
-  // Transition to completed when result becomes available
-  useEffect(() => {
-    if (result && quizState !== 'completed') {
-      setQuizState('completed');
-    }
-  }, [result, quizState]);
+  const displayedQuizState = result ? 'completed' : quizState;
 
   // Warn before leaving page during active quiz
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (quizState === 'in_progress') {
+      if (quizState === 'in_progress' && !result) {
         e.preventDefault();
         e.returnValue = 'You have an active quiz attempt in progress. Leaving will forfeit your unsaved answers.';
         return e.returnValue;
@@ -84,7 +76,7 @@ export default function QuizPlayerPage() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [quizState]);
+  }, [quizState, result]);
 
   // Compute topics covered in this quiz
   const coveredTopics = useMemo(() => {
@@ -101,8 +93,16 @@ export default function QuizPlayerPage() {
 
   // Handle start
   const handleStart = async () => {
-    await startQuizSession();
-    setQuizState('in_progress');
+    try {
+      await startQuizSession();
+      setQuizState('in_progress');
+    } catch {
+      setQuizState('not_started');
+    }
+  };
+
+  const handleSubmit = () => {
+    void submit().catch(() => undefined);
   };
 
   // Handle retry
@@ -173,8 +173,14 @@ export default function QuizPlayerPage() {
         </span>
       </nav>
 
+      {error && (
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* 1. STATE: NOT STARTED */}
-      {quizState === 'not_started' && (
+      {displayedQuizState === 'not_started' && (
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-200">
           <div className="rounded-2xl border border-border bg-card p-8 sm:p-10 shadow-sm space-y-6">
             <div className="flex items-center justify-between border-b border-border/80 pb-6">
@@ -265,7 +271,7 @@ export default function QuizPlayerPage() {
                 Quiz Guidelines:
               </h4>
               <ul className="list-disc list-inside space-y-1 text-muted-foreground text-[11px]">
-                <li>The countdown timer starts as soon as you click "Start Quiz".</li>
+                <li>The countdown timer starts as soon as you click &quot;Start Quiz&quot;.</li>
                 <li>You can flag any question for later review and freely navigate backwards.</li>
                 <li>When the timer expires, all answered questions will automatically submit.</li>
                 <li>Your responses are evaluated instantaneously against syllabus objectives.</li>
@@ -288,7 +294,7 @@ export default function QuizPlayerPage() {
       )}
 
       {/* 2. STATE: IN PROGRESS */}
-      {quizState === 'in_progress' && (
+      {displayedQuizState === 'in_progress' && (
         <QuizPlayer
           quiz={quiz}
           currentQuestion={currentQuestion}
@@ -303,12 +309,12 @@ export default function QuizPlayerPage() {
           onGoToQuestion={goToQuestion}
           onNext={next}
           onPrevious={previous}
-          onSubmit={submit}
+          onSubmit={handleSubmit}
         />
       )}
 
       {/* 3. STATE: COMPLETED */}
-      {quizState === 'completed' && result && (
+      {displayedQuizState === 'completed' && result && (
         <QuizResults
           quiz={quiz}
           result={result}

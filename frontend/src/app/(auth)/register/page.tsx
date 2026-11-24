@@ -10,7 +10,8 @@ import { Loader2, Eye, EyeOff, Lock, Mail, User as UserIcon } from "lucide-react
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
-import type { User } from "@/types";
+import { api } from "@/lib/api/client";
+import { register as registerWithEmail } from "@/lib/api/endpoints";
 
 const registerSchema = z
   .object({
@@ -58,7 +59,6 @@ export default function RegisterPage() {
   const { addToast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const {
     register,
@@ -81,83 +81,18 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      let user: User;
-      let token: string;
-
-      try {
-        const response = await fetch("/api/v1/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: data.name,
-            email: data.email,
-            password: data.password,
-          }),
-        });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(
-            errData?.detail || errData?.message || "Registration failed."
-          );
-        }
-
-        const resData = await response.json();
-        user = resData.user;
-        token = resData.access_token;
-      } catch (apiError: unknown) {
-        const errorMsg =
-          apiError instanceof Error ? apiError.message : String(apiError);
-
-        // Demo / offline fallback
-        if (
-          errorMsg.includes("Failed to fetch") ||
-          errorMsg.includes("NetworkError") ||
-          errorMsg.includes("fetch failed")
-        ) {
-          user = {
-            id: "user-" + Math.random().toString(36).substring(2, 8),
-            name: data.name,
-            email: data.email,
-            created_at: "2026-10-21T00:00:00.000Z",
-            updated_at: "2026-10-21T00:00:00.000Z",
-          };
-          token = "demo_jwt_token_slos_authenticated";
-        } else {
-          throw apiError;
-        }
-      }
-
-      login(user, token);
-      addToast(`Welcome to Student Life OS, ${user.name}!`, "success", "Account Created");
+      const session = await registerWithEmail({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+      });
+      login(session.user, session.access_token);
+      addToast(`Welcome to Student Life OS, ${session.user.name}!`, "success", "Account Created");
       router.push("/");
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to create your account.";
       addToast(msg, "error", "Registration Error");
-    }
-  };
-
-  const handleGoogleSignUp = async () => {
-    setIsGoogleLoading(true);
-    try {
-      await new Promise((r) => setTimeout(r, 800));
-      const googleUser: User = {
-        id: "google-user-2",
-        email: "alex.student@gmail.com",
-        name: "Alex Morgan",
-        avatar_url:
-          "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
-        created_at: "2026-10-21T00:00:00.000Z",
-        updated_at: "2026-10-21T00:00:00.000Z",
-      };
-      login(googleUser, "google_mock_jwt_token");
-      addToast("Account linked with Google successfully.", "success", "Welcome");
-      router.push("/");
-    } catch {
-      addToast("Failed to sign up with Google.", "error");
-    } finally {
-      setIsGoogleLoading(false);
     }
   };
 
@@ -173,16 +108,11 @@ export default function RegisterPage() {
       </div>
 
       {/* Sign up with Google */}
-      <button
-        type="button"
-        onClick={handleGoogleSignUp}
-        disabled={isGoogleLoading || isSubmitting}
-        className="relative inline-flex w-full items-center justify-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 cursor-pointer"
+      <a
+        href={`${api.getBaseUrl()}/auth/google`}
+        className="relative inline-flex w-full items-center justify-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {isGoogleLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        ) : (
-          <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+        <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
               fill="#4285F4"
@@ -199,10 +129,9 @@ export default function RegisterPage() {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               fill="#EA4335"
             />
-          </svg>
-        )}
+        </svg>
         <span>Sign up with Google</span>
-      </button>
+      </a>
 
       {/* Divider */}
       <div className="relative flex items-center justify-center">

@@ -9,7 +9,6 @@ import {
   Trash2,
   Edit2,
   Check,
-  X,
   Send,
   StopCircle,
   GraduationCap,
@@ -22,12 +21,9 @@ import {
   RotateCcw,
   Key,
   Cpu,
-  ChevronDown,
-  Layers,
-  Sparkle,
 } from "lucide-react";
 import { useChatSessionsStore } from "@/store/chat-sessions-store";
-import { useLLMStore, ACADEMIC_AGENTS } from "@/store/llm-store";
+import { ACADEMIC_AGENTS } from "@/store/llm-store";
 import { useSubjects } from "@/lib/api/subjects";
 import { streamAgentChat } from "@/lib/llm-service";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -51,7 +47,6 @@ export default function ChatPage() {
     getActiveSession,
   } = useChatSessionsStore();
 
-  const { providers, activeProviderId, activeModel, hasConfiguredKey } = useLLMStore();
   const { data: subjects = [] } = useSubjects();
 
   const [inputMessage, setInputMessage] = useState("");
@@ -61,7 +56,6 @@ export default function ChatPage() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitleInput, setEditTitleInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [showNewChatModal, setShowNewChatModal] = useState(false);
 
   const activeSession = getActiveSession();
   const activeAgent = activeSession
@@ -104,10 +98,7 @@ export default function ChatPage() {
     const id = createSession({
       agentId,
       subjectId: subjectId || (subjects.length > 0 ? subjects[0].id : undefined),
-      provider: activeProviderId,
-      model: activeModel,
     });
-    setShowNewChatModal(false);
     setActiveSession(id);
   };
 
@@ -121,7 +112,7 @@ export default function ChatPage() {
     }
 
     const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
+      id: `user-${crypto.randomUUID()}`,
       role: "user",
       content: prompt,
       created_at: new Date().toISOString(),
@@ -129,7 +120,7 @@ export default function ChatPage() {
 
     addMessage(activeSession.id, userMessage);
 
-    const assistantMessageId = `asst-${Date.now()}`;
+    const assistantMessageId = `asst-${crypto.randomUUID()}`;
     const assistantMessage: ChatMessage = {
       id: assistantMessageId,
       role: "assistant",
@@ -144,7 +135,6 @@ export default function ChatPage() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const subjectObj = subjects.find((s) => s.id === activeSession.subjectId);
     let streamedContent = "";
 
     const conversationHistory = [
@@ -156,7 +146,7 @@ export default function ChatPage() {
       await streamAgentChat({
         agentId: activeSession.agentId,
         level: activeSession.level,
-        subjectTitle: subjectObj?.title,
+        subjectId: activeSession.subjectId,
         messages: conversationHistory,
         signal: controller.signal,
         onToken: (token) => {
@@ -395,21 +385,21 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Footer: API Key Status Bar */}
+        {/* Footer: backend AI service status */}
         <div className="p-3 border-t border-border bg-card/60 flex items-center justify-between text-xs">
           <div className="flex items-center gap-1.5 truncate">
             <Cpu className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="text-[11px] text-muted-foreground truncate font-mono">
-              {providers[activeProviderId]?.name}: {activeModel}
+              Backend agents service
             </span>
           </div>
 
           <Link
-            href="/settings"
+            href="/settings?tab=api-keys"
             className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline shrink-0"
           >
             <Key className="h-3 w-3" />
-            <span>Keys</span>
+            <span>Details</span>
           </Link>
         </div>
       </aside>
@@ -501,24 +491,6 @@ export default function ChatPage() {
             )}
           </div>
         </header>
-
-        {/* API Key Missing Warning Banner (if no key set) */}
-        {!hasConfiguredKey() && (
-          <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50/70 px-4 py-2 text-xs text-amber-900 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-300">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>
-                Running on simulated preview mode. Add your <strong>Google Gemini</strong> or <strong>OpenAI</strong> API key in Settings for full real-time reasoning.
-              </span>
-            </div>
-            <Link
-              href="/settings"
-              className="inline-flex items-center gap-1 font-semibold text-amber-800 underline dark:text-amber-200 shrink-0"
-            >
-              Add API Key →
-            </Link>
-          </div>
-        )}
 
         {/* Messages Stream Viewport */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
@@ -667,7 +639,7 @@ export default function ChatPage() {
 
             <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
               <span>
-                Engine: <strong className="text-foreground">{providers[activeProviderId]?.name}</strong> ({activeModel})
+                Responses are generated by the backend agents service
               </span>
               <span>
                 Enter to send • Shift + Enter for newline

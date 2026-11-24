@@ -100,7 +100,7 @@ export class ApiClient {
     const rawUrl =
       baseUrl ||
       (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : undefined) ||
-      'http://localhost:8000/api/v1';
+      'http://localhost:3001/api/v1';
     this.baseUrl = rawUrl.replace(/\/+$/, '');
   }
 
@@ -112,25 +112,16 @@ export class ApiClient {
    * Refreshes the access token using the stored refresh token.
    * Merges concurrent calls into a single in-flight promise.
    */
-  private async refreshAccessToken(): Promise<string | null> {
+  public async refreshAccessToken(): Promise<string | null> {
     if (this.refreshPromise) {
       return this.refreshPromise;
-    }
-
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      clearTokens();
-      return null;
     }
 
     this.refreshPromise = (async () => {
       try {
         const response = await fetch(`${this.baseUrl}/auth/refresh`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          credentials: 'include',
         });
 
         if (!response.ok) {
@@ -138,10 +129,11 @@ export class ApiClient {
           return null;
         }
 
-        const data: TokenRefreshResponse = await response.json();
-        if (data.access_token) {
-          setTokens(data.access_token);
-          return data.access_token;
+        const data: TokenRefreshResponse | { accessToken: string } = await response.json();
+        const accessToken = 'accessToken' in data ? data.accessToken : data.access_token;
+        if (accessToken) {
+          setTokens(accessToken);
+          return accessToken;
         }
 
         clearTokens();
@@ -185,6 +177,7 @@ export class ApiClient {
 
     const config: RequestInit = {
       ...options,
+      credentials: options.credentials ?? 'include',
       headers,
     };
 

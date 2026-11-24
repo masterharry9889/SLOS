@@ -41,8 +41,8 @@ const tabs: TabDefinition[] = [
   },
   {
     id: "api-keys",
-    label: "LLM & API Keys",
-    description: "Configure Gemini, OpenAI, Claude & Groq API keys",
+    label: "LLM Provider",
+    description: "AI generation runs through the server-managed agents service",
     icon: Key,
   },
   {
@@ -65,12 +65,30 @@ const tabs: TabDefinition[] = [
   },
 ];
 
+function getInitialTab(): TabId {
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab");
+    const hash = window.location.hash.replace("#", "");
+    if (tabParam === "api-keys" || tabParam === "llm-provider" || hash === "llm-provider" || hash === "api-keys") {
+      return "api-keys";
+    }
+    if (tabParam && ["profile", "appearance", "preferences", "data"].includes(tabParam)) {
+      return tabParam as TabId;
+    }
+    if (hash && ["profile", "appearance", "preferences", "data"].includes(hash)) {
+      return hash as TabId;
+    }
+  }
+  return "profile";
+}
+
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
   const { user } = useAuthStore();
 
   // Fetch user settings using TanStack Query
-  const { data: settings, isLoading, isError } = useQuery({
+  const { data: settings, isLoading } = useQuery({
     queryKey: ["settings"],
     queryFn: getSettings,
     staleTime: 5 * 60 * 1000,

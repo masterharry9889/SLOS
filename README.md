@@ -134,6 +134,7 @@ Ensure you have the following installed on your machine:
 - **Python**: `3.11.x`
 - **Docker & Docker Compose**: For local PostgreSQL, Redis, and MinIO instances
 - **Anthropic API Key**: For Claude LLM generation
+- **Tesseract OCR**: Required only for processing PNG/JPEG documents
 
 ---
 
@@ -177,8 +178,8 @@ DATABASE_URL=postgresql://slos:slos_dev_password@localhost:5432/slos
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=super-secret-random-jwt-key-min-64-characters-long
 AGENTS_SERVICE_URL=http://localhost:8000
-AGENTS_SERVICE_KEY=change-me-agents-service-key
-HMAC_SECRET=change-me-hmac-secret-at-least-32-chars
+AGENTS_SERVICE_API_KEY=change-me-agents-service-key-at-least-32-chars
+JOB_CALLBACK_SECRET=change-me-job-callback-secret-at-least-32-chars
 S3_ENDPOINT=http://localhost:9000
 S3_BUCKET=slos-uploads
 ```
@@ -190,7 +191,8 @@ cp agents-service/.env.example agents-service/.env
 Key configurations in `agents-service/.env`:
 ```env
 PORT=8000
-X_SERVICE_KEY=change-me-agents-service-key
+X_SERVICE_KEY=change-me-agents-service-key-at-least-32-chars
+JOB_CALLBACK_SECRET=change-me-job-callback-secret-at-least-32-chars
 DATABASE_URL=postgresql://slos:slos_dev_password@localhost:5432/slos
 ANTHROPIC_API_KEY=your-anthropic-api-key-here
 ```
@@ -204,6 +206,10 @@ Configure your API target:
 NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 NEXT_PUBLIC_ENABLE_MOCKS=false
 ```
+
+For Google sign-in, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in
+`backend/.env`. Add this authorized redirect URI to the Google OAuth client:
+`http://localhost:3001/api/v1/auth/google/callback`.
 
 ---
 

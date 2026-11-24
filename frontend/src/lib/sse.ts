@@ -1,9 +1,9 @@
 import { Citation, SendChatRequest, SSEChatEvent, SSEJobEvent } from '@/types';
-import { getAccessToken } from './api/client';
+import { api, getAccessToken } from './api/client';
 
 const API_BASE_URL = (
   (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : undefined) ||
-  'http://localhost:8000/api/v1'
+  'http://localhost:3001/api/v1'
 ).replace(/\/+$/, '');
 
 export interface SSEConnectionOptions<T> {
@@ -52,12 +52,21 @@ export function createSSEConnection<T>(
 
   (async () => {
     try {
-      const response = await fetch(fullUrl, {
+      const requestOptions: RequestInit = {
         method,
         headers: requestHeaders,
         body: bodyContent,
         signal,
-      });
+        credentials: 'include',
+      };
+      let response = await fetch(fullUrl, requestOptions);
+      if (response.status === 401) {
+        const refreshedToken = await api.refreshAccessToken();
+        if (refreshedToken) {
+          requestHeaders.Authorization = `Bearer ${refreshedToken}`;
+          response = await fetch(fullUrl, requestOptions);
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`SSE connection failed with HTTP status ${response.status}: ${response.statusText}`);
@@ -133,7 +142,7 @@ export function subscribeToJob(
 ): { close: () => void } {
   let isClosed = false;
 
-  const connection = createSSEConnection<SSEJobEvent>(`/jobs/${encodeURIComponent(jobId)}/events`, {
+  const connection = createSSEConnection<SSEJobEvent>(`/jobs/${encodeURIComponent(jobId)}/stream`, {
     onMessage: (event) => {
       if (isClosed) return;
 
@@ -200,7 +209,9 @@ export function subscribeToChatStream(
     },
     onError: (err) => {
       if (!isClosed) {
+        isClosed = true;
         callbacks.onError(err.message || 'Stream connection error');
+        connection.close();
       }
     },
   });
