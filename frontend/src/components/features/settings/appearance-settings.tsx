@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useTheme } from "next-themes";
+import React from "react";
+import { useTheme } from "@/lib/theme-provider";
+import { useIsMounted } from "@/lib/hooks/use-is-mounted";
 import { Sun, Moon, Laptop, Check, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
@@ -37,12 +38,8 @@ const themeOptions: ThemeOption[] = [
 
 export function AppearanceSettings() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsMounted();
   const { addToast } = useToast();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const handleSelectTheme = (themeId: "light" | "dark" | "system") => {
     setTheme(themeId);

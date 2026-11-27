@@ -22,6 +22,21 @@ and `JOB_CALLBACK_SECRET` for the worker-to-service callback handshake. Google s
 requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; configure the provider callback
 URL to match `GOOGLE_CALLBACK_URL`.
 
+Students can configure Anthropic, OpenAI, Gemini, xAI Grok, Groq, or a local
+OpenAI-compatible model under Settings. `POST /api/v1/settings/llm/providers` verifies a minimal
+generation request before saving a provider. Credentials are encrypted with
+AES-256-GCM and are never included in settings responses or data exports. Set a stable,
+random `LLM_CREDENTIALS_ENCRYPTION_KEY` of at least 32 characters in production; it is
+required when `NODE_ENV=production`. If omitted in development, `JWT_SECRET` is used
+as the encryption key source. Rotating the encryption key invalidates saved provider
+credentials, which must then be entered again.
+
+Local OpenAI-compatible endpoints accept HTTP(S) URLs with custom path prefixes.
+Remote endpoints must use HTTPS and resolve to public addresses. If your local model
+is on a private LAN address, add its exact hostname/IP to the comma-separated
+`LLM_LOCAL_ALLOWED_HOSTS` setting in both `backend/.env` and `agents-service/.env`.
+Loopback and Docker Desktop's `host.docker.internal` are allowed by default.
+
 The API base path is `/api/v1`; the OpenAPI UI is available at `/docs` and its JSON
 specification at `/docs/json`.
 
@@ -32,6 +47,13 @@ specification at `/docs/json`.
 - `POST /api/v1/auth/logout` revokes the refresh token and clears its cookie.
 - `GET /api/v1/auth/me` requires `Authorization: Bearer <access-token>`.
 - `GET /api/v1/auth/google` begins Google OAuth; Google returns to the configured callback.
+
+Provider settings:
+
+- `POST /api/v1/settings/llm/providers` verifies, saves, and activates a provider.
+- `PATCH /api/v1/settings/llm/active` switches to a previously verified provider.
+- `DELETE /api/v1/settings/llm/providers/:providerId` removes a saved provider.
+- `GET /api/v1/settings` returns provider/model metadata but never API keys.
 
 Refresh tokens are random, high-entropy values. Only their SHA-256 digests are persisted.
 

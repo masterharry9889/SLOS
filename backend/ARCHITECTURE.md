@@ -213,6 +213,19 @@ Dashboard shape:
 | GET | /jobs/:id | | Job status |
 | GET | /jobs/:id/stream | | SSE status updates (subscribe Redis pub/sub `job:{id}`) |
 
+### Settings and LLM providers (auth required)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | /settings | Returns preferences and configured provider metadata, never credentials |
+| POST | /settings/llm/providers | Verifies a provider generation request, then saves and activates it |
+| PATCH | /settings/llm/active | Selects a previously verified provider |
+| DELETE | /settings/llm/providers/:providerId | Removes a saved provider credential |
+
+Supported providers are Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, and Local
+OpenAI-compatible endpoints. Local endpoints accept HTTP(S) paths; remote endpoints
+must use HTTPS and resolve to public addresses. Private hosts require an explicit
+`LLM_LOCAL_ALLOWED_HOSTS` entry.
+
 ### Internal (HMAC-verified, no user auth)
 | POST | /internal/agents/callback | `{ job_id, status, result?, error? }` | Verify `X-Signature`, idempotent by job_id |
 
@@ -225,8 +238,16 @@ Dashboard shape:
 4. Internal callback endpoint verifies HMAC, persists results in one Prisma transaction, marks job `completed`
 5. Publishes status event to Redis pub/sub → SSE subscribers get notified
 
+## Provider credential handling
+Provider API keys are verified by the backend with a short generation request and
+encrypted at rest using AES-256-GCM. The API only returns the selected provider,
+model, verification timestamp, and whether it is configured. The backend decrypts
+credentials only when building an authenticated agents-service request; credentials
+are not placed in BullMQ job data. Production requires a stable, dedicated
+`LLM_CREDENTIALS_ENCRYPTION_KEY`.
+
 ## Config (src/config.ts)
-Validate with Zod at startup: PORT, HOST, NODE_ENV, LOG_LEVEL, DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_FORCE_PATH_STYLE, PRESIGNED_URL_TTL_SECONDS, AGENTS_SERVICE_URL, AGENTS_SERVICE_KEY, HMAC_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL, CORS_ORIGIN, FRONTEND_URL, CALLBACK_BASE_URL.
+Validate with Zod at startup: PORT, HOST, NODE_ENV, LOG_LEVEL, DATABASE_URL, REDIS_URL, JWT_SECRET, LLM_CREDENTIALS_ENCRYPTION_KEY, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_FORCE_PATH_STYLE, PRESIGNED_URL_TTL_SECONDS, AGENTS_SERVICE_URL, AGENTS_SERVICE_API_KEY, JOB_CALLBACK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL, CORS_ORIGIN, FRONTEND_URL, BACKEND_URL.
 
 ## Refresh Token
 Generate refresh tokens from cryptographically secure random bytes and persist only their SHA-256 digests. Rotate on refresh and revoke on logout. Cookie: `httpOnly`, `secure` (prod), `sameSite: lax`, `path: /api/v1/auth`, maxAge 7 days.

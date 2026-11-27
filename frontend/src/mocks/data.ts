@@ -330,6 +330,15 @@ export interface UserSettings {
   preferredNotesMode: 'notes' | 'summary';
   defaultExportFormat: 'markdown' | 'pdf';
   updatedAt: string;
+  llm?: {
+    activeProviderId?: 'anthropic' | 'openai' | 'gemini' | 'grok' | 'groq' | 'local';
+    providers: Partial<Record<'anthropic' | 'openai' | 'gemini' | 'grok' | 'groq' | 'local', {
+      model: string;
+      baseUrl?: string;
+      configured: boolean;
+      verifiedAt?: string;
+    }>>;
+  };
 }
 
 export interface DocumentItem {

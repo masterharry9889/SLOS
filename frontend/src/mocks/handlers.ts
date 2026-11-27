@@ -585,7 +585,7 @@ export const handlers = [
     return HttpResponse.json(currentUser);
   }),
 
-  http.put(`${BASE_URL}/settings`, async ({ request }) => {
+  http.patch(`${BASE_URL}/settings`, async ({ request }) => {
     await delay(200);
     try {
       const body = (await request.json()) as Partial<UserSettings>;
@@ -597,6 +597,59 @@ export const handlers = [
     } catch {
       // keep
     }
+    return HttpResponse.json(currentSettings);
+  }),
+
+  http.post(`${BASE_URL}/settings/llm/providers`, async ({ request }) => {
+    await delay(350);
+    const body = await request.json() as {
+      providerId: 'anthropic' | 'openai' | 'gemini' | 'grok' | 'groq' | 'local';
+      model: string;
+      baseUrl?: string;
+    };
+    currentSettings = {
+      ...currentSettings,
+      llm: {
+        activeProviderId: body.providerId,
+        providers: {
+          ...currentSettings.llm?.providers,
+          [body.providerId]: {
+            model: body.model,
+            ...(body.baseUrl ? { baseUrl: body.baseUrl } : {}),
+            configured: true,
+            verifiedAt: new Date().toISOString(),
+          },
+        },
+      },
+    };
+    return HttpResponse.json(currentSettings);
+  }),
+
+  http.patch(`${BASE_URL}/settings/llm/active`, async ({ request }) => {
+    const body = await request.json() as {
+      providerId: 'anthropic' | 'openai' | 'gemini' | 'grok' | 'groq' | 'local';
+    };
+    currentSettings = {
+      ...currentSettings,
+      llm: {
+        activeProviderId: body.providerId,
+        providers: currentSettings.llm?.providers ?? {},
+      },
+    };
+    return HttpResponse.json(currentSettings);
+  }),
+
+  http.delete(`${BASE_URL}/settings/llm/providers/:providerId`, async ({ params }) => {
+    const providerId = String(params.providerId) as 'anthropic' | 'openai' | 'gemini' | 'grok' | 'groq' | 'local';
+    const configuredProviders = { ...currentSettings.llm?.providers };
+    delete configuredProviders[providerId];
+    const activeProviderId = currentSettings.llm?.activeProviderId === providerId
+      ? undefined
+      : currentSettings.llm?.activeProviderId;
+    currentSettings = {
+      ...currentSettings,
+      llm: { activeProviderId, providers: configuredProviders },
+    };
     return HttpResponse.json(currentSettings);
   }),
 

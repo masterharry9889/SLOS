@@ -149,65 +149,53 @@ State clearly:
 };
 
 export const DEFAULT_PROVIDERS: Record<LLMProviderId, LLMProviderConfig> = {
-  gemini: {
-    id: 'gemini',
-    name: 'Google Gemini',
-    description: 'High-speed, long-context reasoning with Gemini 2.5 Flash and Pro models.',
-    apiKey: '',
-    defaultModel: 'gemini-2.5-flash',
-    availableModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'],
-    enabled: true,
-    websiteUrl: 'https://aistudio.google.com/app/apikey',
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    description: 'Claude models for writing and reasoning.',
+    defaultModel: 'claude-3-5-sonnet-20241022',
+    availableModels: ['claude-3-5-sonnet-20241022'],
+    websiteUrl: 'https://console.anthropic.com/settings/keys',
   },
   openai: {
     id: 'openai',
     name: 'OpenAI',
-    description: 'Industry-standard models including GPT-4o, GPT-4o-mini, and reasoning models.',
-    apiKey: '',
+    description: 'GPT models through the OpenAI API.',
     defaultModel: 'gpt-4o-mini',
-    availableModels: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'gpt-4-turbo'],
-    enabled: false,
+    availableModels: ['gpt-4o-mini'],
     websiteUrl: 'https://platform.openai.com/api-keys',
   },
-  anthropic: {
-    id: 'anthropic',
-    name: 'Anthropic Claude',
-    description: 'Nuanced academic writing and deep reasoning with Claude 3.7 & 3.5 Sonnet.',
-    apiKey: '',
-    defaultModel: 'claude-3-7-sonnet',
-    availableModels: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
-    enabled: false,
-    websiteUrl: 'https://console.anthropic.com/settings/keys',
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    description: 'Gemini models through Google AI.',
+    defaultModel: 'gemini-2.0-flash',
+    availableModels: ['gemini-2.0-flash'],
+    websiteUrl: 'https://aistudio.google.com/app/apikey',
+  },
+  grok: {
+    id: 'grok',
+    name: 'Grok',
+    description: 'Grok models provided by xAI.',
+    defaultModel: 'grok-3-mini',
+    availableModels: ['grok-3-mini'],
+    websiteUrl: 'https://console.x.ai/',
   },
   groq: {
     id: 'groq',
-    name: 'Groq Cloud',
-    description: 'Ultra-fast low-latency LPU inference running open-weights Llama 3.3 models.',
-    apiKey: '',
+    name: 'Groq',
+    description: 'Fast inference with Groq-hosted models.',
     defaultModel: 'llama-3.3-70b-versatile',
-    availableModels: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
-    enabled: false,
+    availableModels: ['llama-3.3-70b-versatile'],
     websiteUrl: 'https://console.groq.com/keys',
   },
-  deepseek: {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    description: 'Advanced reasoning and mathematical deduction with DeepSeek-R1 and Chat.',
-    apiKey: '',
-    defaultModel: 'deepseek-chat',
-    availableModels: ['deepseek-chat', 'deepseek-reasoner'],
-    enabled: false,
-    websiteUrl: 'https://platform.deepseek.com/api_keys',
-  },
-  custom: {
-    id: 'custom',
-    name: 'Custom / Local (Ollama)',
-    description: 'Connect to self-hosted Ollama, vLLM, or OpenRouter with an OpenAI-compatible endpoint.',
-    apiKey: '',
-    defaultModel: 'llama3:8b',
-    availableModels: ['llama3:8b', 'deepseek-r1:8b', 'mistral', 'qwen2.5:7b'],
+  local: {
+    id: 'local',
+    name: 'Local / Ollama',
+    description: 'A local OpenAI-compatible inference endpoint.',
+    defaultModel: 'llama3.2',
+    availableModels: ['llama3.2'],
     baseUrl: 'http://localhost:11434/v1',
-    enabled: false,
     websiteUrl: 'https://ollama.com',
   },
 };
@@ -216,33 +204,17 @@ interface LLMStoreState {
   providers: Record<LLMProviderId, LLMProviderConfig>;
   activeProviderId: LLMProviderId;
   activeModel: string;
-  setApiKey: (providerId: LLMProviderId, apiKey: string) => void;
   setDefaultModel: (providerId: LLMProviderId, model: string) => void;
   setBaseUrl: (providerId: LLMProviderId, url: string) => void;
   setActiveProvider: (providerId: LLMProviderId, model?: string) => void;
-  clearApiKey: (providerId: LLMProviderId) => void;
-  getEffectiveKey: (providerId?: LLMProviderId) => string;
-  hasConfiguredKey: () => boolean;
 }
 
 export const useLLMStore = create<LLMStoreState>()(
   persist(
     (set, get) => ({
       providers: DEFAULT_PROVIDERS,
-      activeProviderId: 'gemini',
-      activeModel: 'gemini-2.5-flash',
-
-      setApiKey: (providerId, apiKey) =>
-        set((state) => ({
-          providers: {
-            ...state.providers,
-            [providerId]: {
-              ...state.providers[providerId],
-              apiKey: apiKey.trim(),
-              enabled: Boolean(apiKey.trim()),
-            },
-          },
-        })),
+      activeProviderId: 'anthropic',
+      activeModel: DEFAULT_PROVIDERS.anthropic.defaultModel,
 
       setDefaultModel: (providerId, model) =>
         set((state) => ({
@@ -275,31 +247,10 @@ export const useLLMStore = create<LLMStoreState>()(
         });
       },
 
-      clearApiKey: (providerId) =>
-        set((state) => ({
-          providers: {
-            ...state.providers,
-            [providerId]: {
-              ...state.providers[providerId],
-              apiKey: '',
-              enabled: false,
-            },
-          },
-        })),
-
-      getEffectiveKey: (providerId) => {
-        const id = providerId || get().activeProviderId;
-        return get().providers[id]?.apiKey || '';
-      },
-
-      hasConfiguredKey: () => {
-        const state = get();
-        return Object.values(state.providers).some((p) => Boolean(p.apiKey && p.apiKey.trim().length > 0));
-      },
     }),
     {
       name: 'slos_llm_settings_v1',
-      version: 2,
+      version: 3,
       migrate: () => ({
         providers: DEFAULT_PROVIDERS,
         activeProviderId: 'anthropic' as LLMProviderId,

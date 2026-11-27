@@ -1,8 +1,88 @@
 services:
+  backend:
+    build:
+      context: .
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      agents:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://slos:slos_dev_password@postgres:5432/slos
+      REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3001
+      AGENTS_SERVICE_URL: http://agents:8000
+      AGENTS_SERVICE_API_KEY: development-agents-service-key-32chars
+      LLM_LOCAL_ALLOWED_HOSTS: ${LLM_LOCAL_ALLOWED_HOSTS:-}
+      JOB_CALLBACK_SECRET: development-job-callback-secret-32chars
+      JWT_SECRET: development-jwt-secret-change-before-production
+      LLM_CREDENTIALS_ENCRYPTION_KEY: development-llm-credentials-key-change-before-production
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: slos-uploads
+      S3_FORCE_PATH_STYLE: "true"
+      CORS_ORIGIN: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
+
+  worker:
+    build:
+      context: .
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://slos:slos_dev_password@postgres:5432/slos
+      REDIS_URL: redis://redis:6379
+      BACKEND_URL: http://backend:3001
+      AGENTS_SERVICE_URL: http://agents:8000
+      AGENTS_SERVICE_API_KEY: development-agents-service-key-32chars
+      LLM_LOCAL_ALLOWED_HOSTS: ${LLM_LOCAL_ALLOWED_HOSTS:-}
+      JOB_CALLBACK_SECRET: development-job-callback-secret-32chars
+      JWT_SECRET: development-jwt-secret-change-before-production
+      LLM_CREDENTIALS_ENCRYPTION_KEY: development-llm-credentials-key-change-before-production
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: slos-uploads
+    command: ["node", "dist/workers/jobWorker.js"]
+
+  agents:
+    build:
+      context: ../agents-service
+    ports:
+      - "8000:8000"
+    environment:
+      X_SERVICE_KEY: development-agents-service-key-32chars
+      JOB_CALLBACK_SECRET: development-job-callback-secret-32chars
+      LLM_LOCAL_ALLOWED_HOSTS: ${LLM_LOCAL_ALLOWED_HOSTS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DATABASE_URL: postgresql://slos:slos_dev_password@postgres:5432/slos
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5433:5432"
+      - "5432:5432"
     environment:
       POSTGRES_USER: slos
       POSTGRES_PASSWORD: slos_dev_password

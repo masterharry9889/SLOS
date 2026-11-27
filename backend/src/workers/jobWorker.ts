@@ -5,6 +5,7 @@ import { config } from '@/config.js';
 import { prisma } from '@/lib/prisma.js';
 import { emitJobUpdate } from '@/lib/jobEvents.js';
 import { createDownloadUrl } from '@/lib/storage.js';
+import { getRuntimeLLMConfig } from '@/lib/llmSettings.js';
 
 const JOB_QUEUE_NAME = 'slos-jobs';
 const DEAD_LETTER_QUEUE_NAME = 'slos-jobs-dead-letter';
@@ -19,8 +20,20 @@ const AGENTS_ENDPOINTS: Record<string, string> = {
 const connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 const deadLetterQueue = new Queue(DEAD_LETTER_QUEUE_NAME, { connection });
 
-async function buildAgentPayload(jobId: string, type: string, payload: Record<string, unknown>, callbackUrl: string) {
+async function buildAgentPayload(
+  jobId: string,
+  userId: string,
+  type: string,
+  payload: Record<string, unknown>,
+  callbackUrl: string,
+) {
   const body: Record<string, unknown> = { ...payload, job_id: jobId, callback_url: callbackUrl };
+  const user = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: { settings: true },
+  });
+  const llm = getRuntimeLLMConfig(user?.settings);
+  if (llm) body.llm = llm;
 
   if (type === 'parse') {
     const documentId = String(payload.documentId ?? '');
@@ -83,6 +96,7 @@ export const worker = new Worker(
 
     const payload = await buildAgentPayload(
       jobId,
+      String(job.data.userId),
       String(job.data.type),
       job.data.payload ?? {},
       callbackUrl,

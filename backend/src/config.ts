@@ -25,6 +25,7 @@ const envSchema = z.object({
   BACKEND_URL: z.string().url().default('http://localhost:3001'),
   AGENTS_SERVICE_URL: z.string().url().default('http://localhost:8000'),
   AGENTS_SERVICE_API_KEY: z.string().min(32).default('development-agents-service-key-32chars'),
+  LLM_LOCAL_ALLOWED_HOSTS: z.string().default(''),
   JOB_CALLBACK_SECRET: z.string().min(32).default('development-job-callback-secret-32chars'),
   S3_ENDPOINT: z.string().url().default('http://localhost:9000'),
   S3_REGION: z.string().min(1).default('us-east-1'),
@@ -37,6 +38,10 @@ const envSchema = z.object({
   ),
   PRESIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  LLM_CREDENTIALS_ENCRYPTION_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(32).optional(),
+  ),
   JWT_ACCESS_EXPIRES_IN: z.string().regex(/^\d+[smhd]$/).default('15m').transform(durationToSeconds),
   JWT_REFRESH_EXPIRES_IN: z.string().regex(/^\d+[smhd]$/).default('7d').transform(durationToSeconds),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
@@ -44,6 +49,14 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalNonEmptyString,
   GOOGLE_CLIENT_SECRET: optionalNonEmptyString,
   GOOGLE_CALLBACK_URL: z.string().url().default('http://localhost:3001/api/v1/auth/google/callback'),
+}).superRefine((values, context) => {
+  if (values.NODE_ENV === 'production' && !values.LLM_CREDENTIALS_ENCRYPTION_KEY) {
+    context.addIssue({
+      code: 'custom',
+      path: ['LLM_CREDENTIALS_ENCRYPTION_KEY'],
+      message: 'A dedicated LLM_CREDENTIALS_ENCRYPTION_KEY is required in production',
+    });
+  }
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

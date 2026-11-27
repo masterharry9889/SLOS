@@ -422,6 +422,15 @@ export interface SSEChatEvent {
 export interface UserSettings {
   theme: 'light' | 'dark' | 'system';
   language: string;
+  llm?: {
+    activeProviderId?: LLMProviderId;
+    providers: Partial<Record<LLMProviderId, {
+      model: string;
+      baseUrl?: string;
+      configured: boolean;
+      verifiedAt?: string;
+    }>>;
+  };
 }
 
 export interface UpdateProfileRequest {
@@ -445,17 +454,15 @@ export interface PaginatedResponse<T> {
 
 // ─── LLM Providers & Academic Agents ──────────────────────────────
 
-export type LLMProviderId = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'custom';
+export type LLMProviderId = 'anthropic' | 'openai' | 'gemini' | 'grok' | 'groq' | 'local';
 
 export interface LLMProviderConfig {
   id: LLMProviderId;
   name: string;
   description: string;
-  apiKey: string;
   defaultModel: string;
   availableModels: string[];
   baseUrl?: string;
-  enabled: boolean;
   websiteUrl: string;
 }
 

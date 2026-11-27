@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '@/config.js';
 import { prisma } from '@/lib/prisma.js';
 import { AppError } from '@/lib/errors.js';
+import { getRuntimeLLMConfig } from '@/lib/llmSettings.js';
 
 const ChatSchema = z.object({
   subject_id: z.string().min(1),
@@ -70,6 +71,10 @@ export default async function chatRoutes(fastify: FastifyInstance): Promise<void
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
+    const userSettings = await prisma.user.findFirst({
+      where: { id: request.user!.id, deletedAt: null },
+      select: { settings: true },
+    });
 
     await prisma.chatMessage.create({
       data: {
@@ -96,6 +101,7 @@ export default async function chatRoutes(fastify: FastifyInstance): Promise<void
           subject_title: subject.title,
           subject_context: notes.map((note) => `# ${note.topic.title}\n${note.content}`).join('\n\n'),
           user_id: request.user!.id,
+          llm: getRuntimeLLMConfig(userSettings?.settings),
         }),
         signal: AbortSignal.timeout(60_000),
       });

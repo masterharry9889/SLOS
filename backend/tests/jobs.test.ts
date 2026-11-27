@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import supertest from 'supertest';
-import { signPayload } from '../src/lib/hmac.js';
+import { canonicalJsonPayload, signPayload } from '../src/lib/hmac.js';
 
 vi.mock('../src/lib/prisma.js', () => ({
   prisma: {
@@ -89,7 +89,7 @@ describe('agents callback handling', () => {
 
     const response = await supertest(app!.server)
       .post('/api/v1/internal/agents/callback')
-      .set('x-signature', signPayload(JSON.stringify(payload)))
+      .set('x-signature', signPayload(canonicalJsonPayload(payload)))
       .send(payload);
 
     expect(response.status).toBe(200);
@@ -114,7 +114,7 @@ describe('agents callback handling', () => {
 
     const response = await supertest(app!.server)
       .post('/api/v1/internal/agents/callback')
-      .set('x-signature', signPayload(JSON.stringify(payload)))
+      .set('x-signature', signPayload(canonicalJsonPayload(payload)))
       .send(payload);
 
     expect(response.status).toBe(200);

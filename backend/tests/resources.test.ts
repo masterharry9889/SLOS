@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import supertest from 'supertest';
 import jwt from 'jsonwebtoken';
+import { getRuntimeLLMConfig } from '../src/lib/llmSettings.js';
 
 vi.mock('../src/lib/prisma.js', () => ({
   prisma: {
@@ -80,6 +81,7 @@ describe('subjects, document upload, and storage routes', () => {
 
   afterEach(async () => {
     await app.close();
+    vi.unstubAllGlobals();
   });
 
   it('scopes subject reads to the authenticated user', async () => {
@@ -326,5 +328,197 @@ describe('subjects, document upload, and storage routes', () => {
     expect(prismaMock.document.findFirst).toHaveBeenCalledWith({
       where: { id: 'document_1', userId: ownerId },
     });
+  });
+
+  it('verifies and encrypts provider credentials without returning them', async () => {
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({ settings: {} } as never);
+    vi.mocked(prismaMock.user.update).mockResolvedValue({} as never);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ choices: [{ message: { content: 'OK' } }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await supertest(app.server)
+      .post('/api/v1/settings/llm/providers')
+      .set('authorization', bearer)
+      .send({
+        providerId: 'openai',
+        apiKey: 'secret-provider-key',
+        model: 'gpt-4o-mini',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.llm.activeProviderId).toBe('openai');
+    expect(response.body.llm.providers.openai).toMatchObject({
+      model: 'gpt-4o-mini',
+      configured: true,
+    });
+    expect(JSON.stringify(response.body)).not.toContain('secret-provider-key');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer secret-provider-key' }),
+      }),
+    );
+    expect(prismaMock.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: {
+        settings: expect.objectContaining({
+          llm: expect.objectContaining({
+            providers: expect.objectContaining({
+              openai: expect.objectContaining({
+                encryptedApiKey: expect.any(String),
+              }),
+            }),
+          }),
+        }),
+      },
+    }));
+    const storedSettings = vi.mocked(prismaMock.user.update).mock.calls[0][0].data.settings;
+    expect(getRuntimeLLMConfig(storedSettings)?.api_key).toBe('secret-provider-key');
+
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({
+      settings: storedSettings,
+    } as never);
+    const getResponse = await supertest(app.server)
+      .get('/api/v1/settings')
+      .set('authorization', bearer);
+    expect(getResponse.status).toBe(200);
+    expect(JSON.stringify(getResponse.body)).not.toContain('encryptedApiKey');
+  });
+
+  it('rejects Local provider URLs that could access private services', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({ settings: {} } as never);
+
+    const response = await supertest(app.server)
+      .post('/api/v1/settings/llm/providers')
+      .set('authorization', bearer)
+      .send({
+        providerId: 'local',
+        model: 'llama3.2',
+        baseUrl: 'http://169.254.169.254/v1',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('INVALID_LOCAL_ENDPOINT');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts a custom HTTPS Local endpoint and appends the completion path only when needed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ choices: [{ message: { content: 'OK' } }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({ settings: {} } as never);
+    vi.mocked(prismaMock.user.update).mockResolvedValue({} as never);
+
+    const response = await supertest(app.server)
+      .post('/api/v1/settings/llm/providers')
+      .set('authorization', bearer)
+      .send({
+        providerId: 'local',
+        model: 'custom-model',
+        baseUrl: 'https://8.8.8.8/custom/v1/chat/completions/',
+      });
+
+    expect(response.status, response.text).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://8.8.8.8/custom/v1/chat/completions',
+      expect.any(Object),
+    );
+    expect(prismaMock.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: {
+        settings: expect.objectContaining({
+          llm: expect.objectContaining({
+            providers: expect.objectContaining({
+              local: expect.objectContaining({
+                baseUrl: 'https://8.8.8.8/custom/v1/chat/completions',
+              }),
+            }),
+          }),
+        }),
+      },
+    }));
+  });
+
+  it('does not save provider credentials when the provider rejects verification', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })));
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({ settings: {} } as never);
+
+    const response = await supertest(app.server)
+      .post('/api/v1/settings/llm/providers')
+      .set('authorization', bearer)
+      .send({
+        providerId: 'anthropic',
+        apiKey: 'invalid-test-key',
+        model: 'claude-test',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('PROVIDER_VERIFICATION_FAILED');
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('shows the provider reason when verification returns a structured error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error: { message: 'The requested model is not available.' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    )));
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({ settings: {} } as never);
+
+    const response = await supertest(app.server)
+      .post('/api/v1/settings/llm/providers')
+      .set('authorization', bearer)
+      .send({
+        providerId: 'grok',
+        apiKey: 'invalid-test-key',
+        model: 'grok-test',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.message).toContain('The requested model is not available.');
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('verifies Groq against its OpenAI-compatible API and saves the provider', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ choices: [{ message: { content: 'OK' } }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(prismaMock.user.findFirst).mockResolvedValue({ settings: {} } as never);
+    vi.mocked(prismaMock.user.update).mockResolvedValue({} as never);
+
+    const response = await supertest(app.server)
+      .post('/api/v1/settings/llm/providers')
+      .set('authorization', bearer)
+      .send({
+        providerId: 'groq',
+        apiKey: 'groq-test-key',
+        model: 'llama-3.3-70b-versatile',
+      });
+
+    expect(response.status, response.text).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.groq.com/openai/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer groq-test-key' }),
+      }),
+    );
+    expect(prismaMock.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: {
+        settings: expect.objectContaining({
+          llm: expect.objectContaining({
+            providers: expect.objectContaining({
+              groq: expect.objectContaining({ model: 'llama-3.3-70b-versatile' }),
+            }),
+          }),
+        }),
+      },
+    }));
   });
 });

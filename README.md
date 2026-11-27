@@ -17,6 +17,7 @@
 - 🎯 **Exam Paper & Blueprint Generator**: Generate mock exam papers and detailed answer keys with strict rubric and marks-sum validation tailored to specified difficulty mixes and topic weightings.
 - 📊 **Intelligent Assessment & Grading**: Submit practice answers for automated grading against rubrics, with constructive diagnostic feedback and weak-point analysis.
 - 💬 **Context-Aware Study Tutor**: Real-time SSE streaming chat tutor grounded in your personal course documents and notes.
+- 🔌 **Multiple LLM Providers**: Connect Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, or a local OpenAI-compatible model; verify credentials before use.
 - 📈 **Mastery & Analytics Dashboard**: Track learning streaks, daily study minutes, exam countdowns, quiz score trends, and concept-level mastery.
 - 📄 **High-Fidelity PDF Export**: Render clean, print-ready PDF summaries and question papers via a headless browser engine.
 
@@ -35,7 +36,7 @@ flowchart TD
     end
 
     subgraph Core["Backend API (Fastify + Node 20)"]
-        API["Fastify 4 REST & SSE API"]
+        API["Fastify 5 REST & SSE API"]
         Auth["JWT & OAuth2 Auth"]
         Prisma["Prisma ORM"]
         Queue["BullMQ Queue Producer"]
@@ -74,7 +75,7 @@ flowchart TD
 | Component | Technologies |
 |---|---|
 | **Frontend** | [Next.js 16](https://nextjs.org/) (App Router), [React 19](https://react.dev/), [Tailwind CSS v4](https://tailwindcss.com/), [TypeScript](https://www.typescriptlang.org/), [Zustand](https://zustand-demo.pmnd.rs/), [TanStack Query v5](https://tanstack.com/query/latest), [KaTeX](https://katex.org/), [Lucide React](https://lucide.dev/), [MSW](https://mswjs.io/) |
-| **Backend API** | [Node.js 20+](https://nodejs.org/), [Fastify 4](https://fastify.dev/), [Prisma ORM](https://www.prisma.io/), [BullMQ](https://bullmq.io/), [Redis](https://redis.io/), [Zod](https://zod.dev/), [Puppeteer](https://pptr.dev/), [AWS SDK v3](https://aws.amazon.com/sdk-for-javascript/) (S3/MinIO), [Vitest](https://vitest.dev/) |
+| **Backend API** | [Node.js 20+](https://nodejs.org/), [Fastify 5](https://fastify.dev/), [Prisma ORM](https://www.prisma.io/), [BullMQ](https://bullmq.io/), [Redis](https://redis.io/), [Zod](https://zod.dev/), [Puppeteer](https://pptr.dev/), [AWS SDK v3](https://aws.amazon.com/sdk-for-javascript/) (S3/MinIO), [Vitest](https://vitest.dev/) |
 | **Agents Service** | [Python 3.11](https://www.python.org/), [FastAPI](https://fastapi.tiangolo.com/), [Pydantic v2](https://docs.pydantic.dev/), [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python), [pgvector](https://github.com/pgvector/pgvector-python), [PyMuPDF](https://pymupdf.readthedocs.io/), [python-docx](https://python-docx.readthedocs.io/), [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) |
 | **Data & Infra** | [PostgreSQL 16](https://www.postgresql.org/), [Redis 7](https://redis.io/), [MinIO](https://min.io/) (S3-compatible Object Storage), [Docker Compose](https://docs.docker.com/compose/) |
 
@@ -133,7 +134,7 @@ Ensure you have the following installed on your machine:
 - **Node.js**: `v20.x` or higher and `npm`
 - **Python**: `3.11.x`
 - **Docker & Docker Compose**: For local PostgreSQL, Redis, and MinIO instances
-- **Anthropic API Key**: For Claude LLM generation
+- **An LLM provider API key**: Configure one of the supported providers in Settings (or provide a server-side Anthropic fallback key).
 - **Tesseract OCR**: Required only for processing PNG/JPEG documents
 
 ---
@@ -177,6 +178,7 @@ PORT=3001
 DATABASE_URL=postgresql://slos:slos_dev_password@localhost:5432/slos
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=super-secret-random-jwt-key-min-64-characters-long
+LLM_CREDENTIALS_ENCRYPTION_KEY=generate-a-dedicated-random-secret-at-least-32-characters
 AGENTS_SERVICE_URL=http://localhost:8000
 AGENTS_SERVICE_API_KEY=change-me-agents-service-key-at-least-32-chars
 JOB_CALLBACK_SECRET=change-me-job-callback-secret-at-least-32-chars
@@ -194,6 +196,7 @@ PORT=8000
 X_SERVICE_KEY=change-me-agents-service-key-at-least-32-chars
 JOB_CALLBACK_SECRET=change-me-job-callback-secret-at-least-32-chars
 DATABASE_URL=postgresql://slos:slos_dev_password@localhost:5432/slos
+# Optional fallback for users without a saved provider configuration
 ANTHROPIC_API_KEY=your-anthropic-api-key-here
 ```
 
@@ -375,6 +378,8 @@ npx playwright test
 - **Tenant Isolation**: Every database query enforces ownership checks scoped to the authenticated user ID (`userId`).
 - **Secure File Storage**: Documents are uploaded directly to MinIO/S3 using short-lived presigned URLs.
 - **Credential Hygiene**: Sensitive secrets and API keys are managed through `.env` files and strictly excluded from Git tracking via `.gitignore`.
+- **Per-user AI credentials**: Provider keys entered in Settings are verified by the backend, encrypted at rest with AES-256-GCM, and never returned to the frontend. Set a stable, random `LLM_CREDENTIALS_ENCRYPTION_KEY` (at least 32 characters) in production; rotating it requires re-entering saved provider keys.
+- **Local model URLs**: Local/OpenAI-compatible endpoints accept HTTP(S) base URLs and custom path prefixes. Remote targets must use HTTPS and resolve publicly; add exact private LAN hosts to `LLM_LOCAL_ALLOWED_HOSTS` in both service environments.
 
 ---
 

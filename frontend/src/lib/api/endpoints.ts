@@ -30,6 +30,7 @@ import type {
   UserSettings,
   UpdateProfileRequest,
   UpdateSettingsRequest,
+  LLMProviderId,
 } from '@/types';
 
 // ==========================================
@@ -562,6 +563,31 @@ export async function updateSettings(
   data: UpdateSettingsRequest
 ): Promise<UserSettings> {
   return api.patch<UserSettings>('/settings', data);
+}
+
+export interface SaveLLMProviderRequest {
+  providerId: LLMProviderId;
+  apiKey?: string;
+  model: string;
+  baseUrl?: string;
+}
+
+export async function saveLLMProvider(
+  data: SaveLLMProviderRequest,
+): Promise<UserSettings> {
+  return api.post<UserSettings>('/settings/llm/providers', data);
+}
+
+export async function selectLLMProvider(
+  providerId: LLMProviderId,
+): Promise<UserSettings> {
+  return api.patch<UserSettings>('/settings/llm/active', { providerId });
+}
+
+export async function removeLLMProvider(
+  providerId: LLMProviderId,
+): Promise<UserSettings> {
+  return api.delete<UserSettings>(`/settings/llm/providers/${providerId}`);
 }
 
 export async function exportData(): Promise<{ download_url: string }> {

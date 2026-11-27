@@ -42,7 +42,7 @@ const tabs: TabDefinition[] = [
   {
     id: "api-keys",
     label: "LLM Provider",
-    description: "AI generation runs through the server-managed agents service",
+    description: "Choose and verify your AI provider",
     icon: Key,
   },
   {
@@ -189,7 +189,7 @@ export default function SettingsPage() {
               aria-labelledby="tab-api-keys"
               className="animate-in fade-in-50 duration-200"
             >
-              <ApiSettings />
+              <ApiSettings initialSettings={settings} />
             </div>
           )}
 

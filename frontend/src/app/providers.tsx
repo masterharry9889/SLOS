@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { ThemeProvider } from "next-themes";
 import { isServer, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { ThemeProvider } from "@/lib/theme-provider";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -38,6 +38,7 @@ export function Providers({ children }: ProvidersProps) {
   useEffect(() => {
     // Initialize auth state from local persistence / cookies
     useAuthStore.getState().initialize();
+    window.localStorage.removeItem("slos_llm_settings_v1");
 
     // Initialize MSW in development mode in the browser only when mocks are enabled
     if (
@@ -59,14 +60,7 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        {children}
-      </ThemeProvider>
+      <ThemeProvider>{children}</ThemeProvider>
     </QueryClientProvider>
   );
 }

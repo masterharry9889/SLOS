@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import {
   Menu,
   Search,
@@ -19,6 +18,7 @@ import { useUIStore } from "@/lib/store/ui-store";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useToast } from "@/components/ui/toaster";
 import { useIsMounted } from "@/lib/hooks/use-is-mounted";
+import { useTheme } from "@/lib/theme-provider";
 
 interface TopbarProps {
   breadcrumbs?: { label: string; href?: string }[];

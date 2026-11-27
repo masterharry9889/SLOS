@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma.js';
 import { AppError } from '@/lib/errors.js';
 import { deleteObject, uploadJsonExport } from '@/lib/storage.js';
+import { decryptLLMCredential, encryptLLMCredential } from '@/lib/llmCredentials.js';
+import { asSettingsRecord, publicSettings, readProviderSettings } from '@/lib/llmSettings.js';
+import {
+  LLMProviderConfigSchema,
+  LLMProviderIdSchema,
+  normalizeLocalBaseUrlForStorage,
+  verifyLLMProvider,
+  type RuntimeLLMConfig,
+} from '@/lib/llmProviders.js';
 
 const UpdateProfileSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),
@@ -47,7 +56,11 @@ export default async function userRoutes(fastify: FastifyInstance): Promise<void
       select: { settings: true },
     });
     if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
-    return { theme: 'system', language: 'en', ...(user.settings as Record<string, unknown>) };
+    return {
+      theme: 'system',
+      language: 'en',
+      ...publicSettings(user.settings),
+    };
   });
 
   fastify.patch('/settings', async (request) => {
@@ -57,12 +70,106 @@ export default async function userRoutes(fastify: FastifyInstance): Promise<void
       select: { settings: true },
     });
     if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
-    const settings = { theme: 'system', language: 'en', ...(user.settings as Record<string, unknown>), ...input };
+    const storedSettings = { theme: 'system', language: 'en', ...asSettingsRecord(user.settings), ...input };
     await prisma.user.update({
       where: { id: request.user!.id },
-      data: { settings },
+      data: { settings: storedSettings },
     });
-    return settings;
+    return publicSettings(storedSettings);
+  });
+
+  fastify.post('/settings/llm/providers', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request) => {
+    const input = LLMProviderConfigSchema.parse(request.body);
+    const user = await prisma.user.findFirst({
+      where: { id: request.user!.id, deletedAt: null },
+      select: { settings: true },
+    });
+    if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
+
+    const settings = asSettingsRecord(user.settings);
+    const llm = readProviderSettings(settings);
+    const existing = llm.providers[input.providerId];
+    const apiKey = input.apiKey?.trim()
+      || (existing?.encryptedApiKey ? decryptLLMCredential(existing.encryptedApiKey) : '');
+    const baseUrl = input.providerId === 'local'
+      ? normalizeLocalBaseUrlForStorage(input.baseUrl)
+      : undefined;
+    const runtimeConfig: RuntimeLLMConfig = {
+      provider: input.providerId,
+      api_key: apiKey,
+      model: input.model,
+      ...(baseUrl ? { base_url: baseUrl } : {}),
+    };
+    await verifyLLMProvider(runtimeConfig);
+
+    const providers = {
+      ...llm.providers,
+      [input.providerId]: {
+        model: input.model,
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(apiKey ? { encryptedApiKey: encryptLLMCredential(apiKey) } : {}),
+        verifiedAt: new Date().toISOString(),
+      } satisfies NonNullable<typeof llm.providers[string]>,
+    };
+    const updatedSettings = {
+      ...settings,
+      llm: { activeProviderId: input.providerId, providers },
+    };
+    await prisma.user.update({
+      where: { id: request.user!.id },
+      data: { settings: updatedSettings },
+    });
+    return publicSettings(updatedSettings);
+  });
+
+  fastify.delete('/settings/llm/providers/:providerId', async (request) => {
+    const { providerId } = z.object({ providerId: LLMProviderIdSchema }).parse(request.params);
+    const user = await prisma.user.findFirst({
+      where: { id: request.user!.id, deletedAt: null },
+      select: { settings: true },
+    });
+    if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
+    const settings = asSettingsRecord(user.settings);
+    const llm = readProviderSettings(settings);
+    const providers = { ...llm.providers };
+    delete providers[providerId];
+    const activeProviderId = llm.activeProviderId === providerId
+      ? Object.keys(providers).find((id) => LLMProviderIdSchema.safeParse(id).success)
+      : llm.activeProviderId;
+    const updatedSettings = {
+      ...settings,
+      llm: { ...(activeProviderId ? { activeProviderId } : {}), providers },
+    };
+    await prisma.user.update({
+      where: { id: request.user!.id },
+      data: { settings: updatedSettings },
+    });
+    return publicSettings(updatedSettings);
+  });
+
+  fastify.patch('/settings/llm/active', async (request) => {
+    const { providerId } = z.object({ providerId: LLMProviderIdSchema }).parse(request.body);
+    const user = await prisma.user.findFirst({
+      where: { id: request.user!.id, deletedAt: null },
+      select: { settings: true },
+    });
+    if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
+    const settings = asSettingsRecord(user.settings);
+    const llm = readProviderSettings(settings);
+    if (!llm.providers[providerId]) {
+      throw new AppError(409, 'PROVIDER_NOT_CONFIGURED', 'Verify and save this provider before selecting it');
+    }
+    const updatedSettings = {
+      ...settings,
+      llm: { ...llm, activeProviderId: providerId },
+    };
+    await prisma.user.update({
+      where: { id: request.user!.id },
+      data: { settings: updatedSettings },
+    });
+    return publicSettings(updatedSettings);
   });
 
   fastify.post('/settings/export', async (request) => {
@@ -85,7 +192,8 @@ export default async function userRoutes(fastify: FastifyInstance): Promise<void
     if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
     try {
       return { download_url: await uploadJsonExport(userId, {
-        user, subjects, documents, topics, notes, artifacts, quizzes, attempts, progressEvents,
+        user: { ...user, settings: publicSettings(user.settings) },
+        subjects, documents, topics, notes, artifacts, quizzes, attempts, progressEvents,
       }) };
     } catch {
       throw new AppError(502, 'EXPORT_FAILED', 'Your data export could not be created');

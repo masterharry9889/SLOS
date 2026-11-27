@@ -23,7 +23,7 @@ from app.agents.notes_agent import NotesAgent
 from app.agents.paper_agent import PaperAgent
 from app.agents.parser_agent import ParserAgent
 from app.agents.tutor_agent import TutorAgent
-from app.core import LLMWrapper, MODEL_TUTOR
+from app.core import LLMConfiguration, LLMWrapper, MODEL_TUTOR
 from app.schemas import NotesRequest, PaperBlueprint
 
 app = FastAPI(title="Student Life OS - Agents Service")
@@ -55,6 +55,7 @@ async def health():
 class JobRequest(BaseModel):
     job_id: str = Field(min_length=1)
     callback_url: str = Field(min_length=1)
+    llm: LLMConfiguration | None = None
 
 
 class ParseRequest(JobRequest):
@@ -101,13 +102,25 @@ def callback_signature(body: bytes) -> str:
     return f"sha256={digest}"
 
 
+def callback_headers(body: bytes) -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "X-Signature": callback_signature(body),
+    }
+
+
 async def post_callback(callback_url: str, payload: dict) -> None:
     body = json.dumps(
         normalize_callback_json(payload),
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
-    signature = callback_signature(body)
+    canonical_body = json.dumps(
+        normalize_callback_json(payload),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
     async with httpx.AsyncClient(timeout=20) as client:
         last_error: Exception | None = None
         for attempt in range(3):
@@ -115,7 +128,7 @@ async def post_callback(callback_url: str, payload: dict) -> None:
                 response = await client.post(
                     callback_url,
                     content=body,
-                    headers={"Content-Type": "application/json", "X-Signature": f"sha256={signature}"},
+                    headers=callback_headers(canonical_body),
                 )
                 response.raise_for_status()
                 return
@@ -198,7 +211,7 @@ async def extract_document_text(file_url: str, file_name: str) -> str:
 async def parse_topic_tree(req: ParseRequest, background_tasks: BackgroundTasks):
     async def parse() -> dict:
         text = await extract_document_text(req.document_url, req.file_name)
-        parser = ParserAgent(LLMWrapper())
+        parser = ParserAgent(LLMWrapper(req.llm))
         tree = await asyncio.to_thread(parser.extract_topic_tree, text, req.source_type)
         tree["subject_title"] = req.subject_title
         tree["source_type"] = req.source_type
@@ -226,7 +239,7 @@ async def parse_topic_tree(req: ParseRequest, background_tasks: BackgroundTasks)
 @app.post("/v1/notes/generate", status_code=202)
 async def generate_notes(req: NotesJobRequest, background_tasks: BackgroundTasks):
     def generate() -> dict:
-        agent = NotesAgent(LLMWrapper())
+        agent = NotesAgent(LLMWrapper(req.llm))
         notes = NotesRequest(
             chapter_id=req.chapter_id,
             subject_context=req.subject_context,
@@ -242,7 +255,7 @@ async def generate_notes(req: NotesJobRequest, background_tasks: BackgroundTasks
 @app.post("/v1/cheatsheets/generate", status_code=202)
 async def generate_cheatsheet(req: CheatSheetJobRequest, background_tasks: BackgroundTasks):
     def generate() -> dict:
-        content = CheatSheetAgent(LLMWrapper()).generate(req.notes, req.scope_title, req.format)
+        content = CheatSheetAgent(LLMWrapper(req.llm)).generate(req.notes, req.scope_title, req.format)
         return {
             "type": "cheatsheet",
             "scope": req.scope,
@@ -270,7 +283,7 @@ async def generate_paper(req: PaperJobRequest, background_tasks: BackgroundTasks
             question_types=question_types,
             past_paper_pattern=req.past_paper_pattern,
         )
-        result = PaperAgent(LLMWrapper()).generate(blueprint)
+        result = PaperAgent(LLMWrapper(req.llm)).generate(blueprint)
         if result.get("error"):
             raise ValueError(str(result["error"]))
         return {
@@ -288,7 +301,7 @@ async def generate_paper(req: PaperJobRequest, background_tasks: BackgroundTasks
 @app.post("/v1/assessments/evaluate", status_code=202)
 async def evaluate_assessment(req: AssessmentJobRequest, background_tasks: BackgroundTasks):
     def evaluate() -> dict:
-        agent = AssessmentAgent(LLMWrapper())
+        agent = AssessmentAgent(LLMWrapper(req.llm))
         graded = []
         score = 0.0
         max_score = 0.0
@@ -326,6 +339,7 @@ class ChatRequest(BaseModel):
     message: str
     level: str = "simple"
     agent_id: str = "tutor"
+    llm: LLMConfiguration | None = None
     history: list[dict[str, str]] = Field(default_factory=list)
 
 
@@ -347,7 +361,7 @@ def chat_tokens(req: ChatRequest) -> Iterator[str]:
         f"Response level: {level}.\n\nSTUDY NOTES:\n{context}\n\n"
         f"CONVERSATION:\n{history}\n\nSTUDENT QUESTION:\n{req.message}"
     )
-    yield from LLMWrapper().stream(MODEL_TUTOR, prompt)
+    yield from LLMWrapper(req.llm).stream(MODEL_TUTOR, prompt)
 
 
 @app.post("/v1/chat")
